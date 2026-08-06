@@ -40,7 +40,9 @@
   /* Ink that clears contrast when set on each sequential step. */
   --ink-on-seq-100: #0b0b0b;
   --ink-on-seq-200: #0b0b0b;
+  --ink-on-seq-300: #0b0b0b;
   --ink-on-seq-400: #ffffff;
+  --ink-on-seq-500: #ffffff;
   --ink-on-seq-600: #ffffff;
   --ink-on-seq-700: #ffffff;
 
@@ -85,7 +87,9 @@
     /* The dark ramp runs dark→light, so the safe ink flips with it. */
     --ink-on-seq-100: #ffffff;
     --ink-on-seq-200: #ffffff;
+    --ink-on-seq-300: #ffffff;
     --ink-on-seq-400: #ffffff;
+    --ink-on-seq-500: #0b0b0b;
     --ink-on-seq-600: #0b0b0b;
     --ink-on-seq-700: #0b0b0b;
 
@@ -124,7 +128,9 @@
 
   --ink-on-seq-100: #ffffff;
   --ink-on-seq-200: #ffffff;
+  --ink-on-seq-300: #ffffff;
   --ink-on-seq-400: #ffffff;
+  --ink-on-seq-500: #0b0b0b;
   --ink-on-seq-600: #0b0b0b;
   --ink-on-seq-700: #0b0b0b;
 

@@ -12,27 +12,29 @@ interface Props {
   customersWithoutState: number;
 }
 
-/** Five sequential steps, one hue. Zero-customer states stay on the surface. */
-const RAMP = [
-  "var(--seq-100)",
-  "var(--seq-200)",
-  "var(--seq-400)",
-  "var(--seq-600)",
-  "var(--seq-700)",
-];
-
 /**
- * Ink for a tile label, picked per step so it clears contrast in BOTH modes.
- * The ramp inverts in dark mode (low values recede toward the dark surface), so
- * the safe ink flips with it — hence the CSS variable rather than a fixed hex.
+ * One hue, light→dark. A sub-ramp per bin count, so the steps stay evenly
+ * spaced however many bins the data produces — picking N steps off a fixed
+ * five-step ramp leaves visible gaps at some counts and near-duplicates at
+ * others.
+ *
+ * Zero-customer states stay on the surface and are never given a ramp step.
  */
-const RAMP_INK = [
-  "var(--ink-on-seq-100)",
-  "var(--ink-on-seq-200)",
-  "var(--ink-on-seq-400)",
-  "var(--ink-on-seq-600)",
-  "var(--ink-on-seq-700)",
-];
+const RAMPS: Record<number, number[]> = {
+  1: [700],
+  2: [200, 700],
+  3: [100, 400, 700],
+  4: [100, 300, 500, 700],
+  5: [100, 200, 400, 600, 700],
+};
+
+const step = (n: number) => `var(--seq-${n})`;
+/**
+ * Ink for a tile label. The ramp inverts in dark mode (low values recede toward
+ * the dark surface), so the safe ink flips with it — hence a variable per step
+ * rather than a fixed hex.
+ */
+const ink = (n: number) => `var(--ink-on-seq-${n})`;
 
 interface Bin {
   min: number;
@@ -67,10 +69,10 @@ function makeBins(values: number[]): Bin[] {
   return bins;
 }
 
-/** Spread however many bins we ended up with across the five ramp steps. */
-function rampIndex(binIdx: number, binCount: number): number {
-  if (binCount <= 1) return 4;
-  return Math.round((binIdx / (binCount - 1)) * 4);
+/** The ramp step number for bin `i` of `count`. */
+function rampStep(i: number, count: number): number {
+  const ramp = RAMPS[Math.min(5, Math.max(1, count))];
+  return ramp[Math.min(i, ramp.length - 1)];
 }
 
 export function StatesCard({ data, customersWithoutState }: Props) {
@@ -88,11 +90,11 @@ export function StatesCard({ data, customersWithoutState }: Props) {
   );
   const bins = useMemo(() => makeBins(data.map((d) => d.customers)), [data]);
 
-  /** Ramp step 0..4 for a count, or -1 for "no customers here". */
+  /** Ramp step number for a count, or 0 for "no customers here". */
   const bin = (count: number) => {
-    if (count <= 0) return -1;
+    if (count <= 0) return 0;
     const i = bins.findIndex((b) => count >= b.min && count <= b.max);
-    return rampIndex(i < 0 ? bins.length - 1 : i, bins.length);
+    return rampStep(i < 0 ? bins.length - 1 : i, bins.length);
   };
 
   const showTip = (e: React.MouseEvent, state: StateCount) => {
@@ -182,7 +184,7 @@ function Cartogram({
           const stat = byCode.get(cell.code);
           const count = stat?.customers ?? 0;
           const b = bin(count);
-          const empty = b < 0;
+          const empty = count <= 0;
           const x = cell.col * (TILE + GAP);
           const y = cell.row * (TILE + GAP);
           return (
@@ -200,7 +202,7 @@ function Cartogram({
                 width={TILE}
                 height={TILE}
                 rx={5}
-                fill={empty ? "var(--surface-2)" : RAMP[b]}
+                fill={empty ? "var(--surface-2)" : step(b)}
                 stroke={empty ? "var(--border)" : "none"}
                 strokeWidth={1}
               />
@@ -210,7 +212,7 @@ function Cartogram({
                 textAnchor="middle"
                 fontSize={11}
                 fontWeight={600}
-                fill={empty ? "var(--text-muted)" : RAMP_INK[b]}
+                fill={empty ? "var(--text-muted)" : ink(b)}
               >
                 {cell.code}
               </text>
@@ -220,7 +222,7 @@ function Cartogram({
                   y={y + TILE / 2 + 11}
                   textAnchor="middle"
                   fontSize={10}
-                  fill={RAMP_INK[b]}
+                  fill={ink(b)}
                   opacity={0.85}
                 >
                   {count}
@@ -248,7 +250,7 @@ function ScaleLegend({ bins }: { bins: Bin[] }) {
           <span
             aria-hidden="true"
             style={{
-              background: RAMP[rampIndex(i, bins.length)],
+              background: step(rampStep(i, bins.length)),
               width: 14,
               height: 10,
               borderRadius: 2,
