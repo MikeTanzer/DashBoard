@@ -1,0 +1,240 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Pyrotree design tokens.
+   Chart colors come from the validated reference palette; light and dark are
+   separately-stepped sets, not an automatic flip. Surfaces here are the exact
+   surfaces the palette was validated against.
+   --------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: light;
+
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --surface-2: #f3f3f0;
+
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+
+  --gridline: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+  --border-strong: rgba(11, 11, 11, 0.18);
+
+  /* categorical slots */
+  --series-1: #2a78d6; /* blue   — SaaS */
+  --series-2: #eb6834; /* orange — Usage */
+  --series-3: #1baf7a;
+
+  /* sequential blue ramp, light→dark (magnitude) */
+  --seq-100: #cde2fb;
+  --seq-200: #9ec5f4;
+  --seq-300: #6da7ec;
+  --seq-400: #3987e5;
+  --seq-500: #256abf;
+  --seq-600: #184f95;
+  --seq-700: #0d366b;
+
+  /* Ink that clears contrast when set on each sequential step. */
+  --ink-on-seq-100: #0b0b0b;
+  --ink-on-seq-200: #0b0b0b;
+  --ink-on-seq-400: #ffffff;
+  --ink-on-seq-600: #ffffff;
+  --ink-on-seq-700: #ffffff;
+
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+  --delta-good: #006300;
+
+  --brand: #e2571f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --surface-2: #232322;
+
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+
+    --gridline: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --border-strong: rgba(255, 255, 255, 0.18);
+
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+
+    --seq-100: #184f95;
+    --seq-200: #256abf;
+    --seq-300: #2a78d6;
+    --seq-400: #3987e5;
+    --seq-500: #5598e7;
+    --seq-600: #86b6ef;
+    --seq-700: #b7d3f6;
+
+    /* The dark ramp runs dark→light, so the safe ink flips with it. */
+    --ink-on-seq-100: #ffffff;
+    --ink-on-seq-200: #ffffff;
+    --ink-on-seq-400: #ffffff;
+    --ink-on-seq-600: #0b0b0b;
+    --ink-on-seq-700: #0b0b0b;
+
+    --delta-good: #0ca30c;
+    --brand: #f0733d;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --surface-2: #232322;
+
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+
+  --gridline: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+
+  --seq-100: #184f95;
+  --seq-200: #256abf;
+  --seq-300: #2a78d6;
+  --seq-400: #3987e5;
+  --seq-500: #5598e7;
+  --seq-600: #86b6ef;
+  --seq-700: #b7d3f6;
+
+  --ink-on-seq-100: #ffffff;
+  --ink-on-seq-200: #ffffff;
+  --ink-on-seq-400: #ffffff;
+  --ink-on-seq-600: #0b0b0b;
+  --ink-on-seq-700: #0b0b0b;
+
+  --delta-good: #0ca30c;
+  --brand: #f0733d;
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-hairline: var(--border);
+  --color-brand: var(--brand);
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+html,
+body {
+  background: var(--page);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Cards ------------------------------------------------------------------- */
+
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.hairline {
+  border-color: var(--border);
+}
+
+/* Chart chrome ------------------------------------------------------------ */
+
+.axis-text {
+  fill: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gridline {
+  stroke: var(--gridline);
+  stroke-width: 1;
+}
+
+.baseline {
+  stroke: var(--axis);
+  stroke-width: 1;
+}
+
+/* Tooltip ----------------------------------------------------------------- */
+
+.viz-tooltip {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+  white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 10px));
+}
+
+/* Texture — the opt-in accessibility channel (print + forced-colors) ------- */
+
+@media print, (forced-colors: active) {
+  .texture-a {
+    fill: url(#tex-45);
+  }
+  .texture-b {
+    fill: url(#tex-135);
+  }
+}
+
+table.dataview {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+table.dataview th,
+table.dataview td {
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+table.dataview td.num,
+table.dataview th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+table.dataview thead th {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}

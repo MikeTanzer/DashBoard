@@ -1,0 +1,45 @@
+{
+  "_comment": [
+    "Manual data file. Copy to data/network.json to use it.",
+    "Every top-level key is optional — supply only what no connector can reach yet.",
+    "Money is in whole CENTS. States are USPS two-letter codes.",
+    "Set \"demo\": false once these are real numbers; the demo banner keys off it."
+  ],
+  "demo": false,
+
+  "platforms": [
+    { "id": "webjoint", "name": "WebJoint", "industry": "Cannabis" },
+    { "id": "menu", "name": "Menu.com", "industry": "Cannabis" }
+  ],
+
+  "customers": [
+    {
+      "id": "wj-0001",
+      "name": "Example Dispensary",
+      "platform": "webjoint",
+      "state": "CA",
+      "status": "active",
+      "mrrSaasCents": 49900,
+      "mrrUsageCents": 18200,
+      "startedAt": "2024-05-14"
+    }
+  ],
+
+  "consumers": [
+    {
+      "platform": "webjoint",
+      "tracked": 0,
+      "purchased30d": 0,
+      "purchased180d": 0
+    }
+  ],
+
+  "revenue": [
+    {
+      "month": "2026-07",
+      "platform": "webjoint",
+      "saasCents": 0,
+      "usageCents": 0
+    }
+  ]
+}
