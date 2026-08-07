@@ -9,7 +9,6 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "demo": "node scripts/generate-demo.mjs",
-    "secret": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
     "map": "node scripts/gen-us-map.mjs && node scripts/emit-us-map.mjs src/lib/us-map.ts"
   },
   "dependencies": {

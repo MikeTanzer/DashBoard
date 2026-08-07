@@ -15,20 +15,13 @@ silently zero.
 ```bash
 npm install
 npm run demo          # writes data/network.json with a seeded demo network
-cp .env.example .env.local
-npm run secret        # paste into PYROTREE_SESSION_SECRET
 npm run dev
 ```
 
-Then open http://localhost:3000 and sign in.
+Then open http://localhost:3000. There's no login — see **Access** below.
 
-`.env.local` needs three values at minimum:
-
-```
-PYROTREE_SESSION_SECRET=<output of `npm run secret`>
-PYROTREE_ADMIN_PASSWORD=<pick one>
-PYROTREE_INVESTOR_PASSWORD=<pick a different one>
-```
+Nothing in `.env.local` is required to run it; every connector is optional and
+an unconfigured one just reports what it needs.
 
 ---
 
@@ -45,7 +38,7 @@ PYROTREE_INVESTOR_PASSWORD=<pick a different one>
 - Monthly recurring revenue (the hero figure) and annual run rate
 - Collected revenue, stacked SaaS vs Usage, over **1W / 1M / 3M / 6M / 12M / All**
   (3M by default)
-- Month-over-month change, computed on complete months only
+- Period-over-period change, computed on complete periods only
 
 The two short ranges are **day-grained** and read a separate daily series.
 A week has no meaning in monthly buckets, and resampling months into days would
@@ -67,19 +60,25 @@ selection so a filtered view is shareable.
 
 ## Access
 
-Two shared passwords, two roles:
+**There is no login. Anyone who can reach the URL sees everything** — customer
+counts, revenue, the per-platform breakdown and the Data sources panel.
 
-| Role | Sees |
-|---|---|
-| `investor` | The metric view |
-| `admin` | Everything, plus the **Data sources** panel and `GET /api/snapshot` |
+If this is ever deployed somewhere reachable, put the gate at the edge rather
+than in the app: Vercel's built-in password protection, Cloudflare Access, or
+keeping it on a private network. That's a config toggle, not a code change, and
+it's a better place for it than a shared password in an env var.
 
-Sessions are HMAC-signed cookies with a 12-hour life, verified in middleware.
-Every route is private except `/login`. Changing `PYROTREE_SESSION_SECRET`
-signs everyone out.
+Two things are deliberately hardened for the no-login case, because the app can
+no longer assume its reader is trusted:
 
-This is a shared-password gate, not per-user identity: it's right for a small
-investor group, and the natural upgrade is an email allowlist with magic links.
+- **`GET /api/snapshot` is off by default.** It returns every customer by name
+  with their revenue, which is a different proposition from an unauthenticated
+  dashboard. Set `PYROTREE_SNAPSHOT_API` to a long random secret (callers then
+  send `?key=…` or `Authorization: Bearer …`), or to `open` to allow anyone
+  with the URL. Unset, it 404s.
+- **Connector errors are redacted before display.** `pg` and `mysql2` quote the
+  whole connection string back on failure, password included, and a failed
+  Stripe call can echo the key. Those are masked on the way to the screen.
 
 ---
 
@@ -165,14 +164,14 @@ automatically. Give it a display name and industry either from the connector's
 Any Node host works; Vercel is the shortest path.
 
 1. Push, import the repo, and set the env vars from `.env.example`.
-2. **Set `PYROTREE_SESSION_SECRET`** — the app fails closed without it and
-   nobody can sign in.
+2. **Turn on access protection at the host.** The app has no login, so a plain
+   deployment is public to anyone with the URL.
 3. `data/network.json` is gitignored, so a deployment has no manual data unless
    you add it. That's intended: connect Stripe and let the automated sources
    carry it.
 
 Snapshots are cached in-process for `PYROTREE_CACHE_SECONDS` (default 300).
-Admins can force a refresh with `GET /api/snapshot?force=1`.
+Force a refresh with `GET /api/snapshot?force=1` (needs `PYROTREE_SNAPSHOT_API`).
 
 ---
 
@@ -182,18 +181,15 @@ Admins can force a refresh with `GET /api/snapshot?force=1`.
 src/
   app/
     page.tsx              dashboard
-    login/                password gate
-    api/auth · logout · snapshot
+    api/snapshot          raw JSON, off unless PYROTREE_SNAPSHOT_API is set
   connectors/             one file per data source + the registry
     queries.ts            the SQL to edit for your schema
   lib/
     metrics.ts            every derived number, and its "not tracked" reason
     types.ts              the normalized data model
-    auth.ts               HMAC session, Edge-safe
     states.ts             USPS codes and name normalisation
     us-map.ts             GENERATED state geometry (npm run map)
   components/             stat tiles, charts, filters
-  middleware.ts           the gate
 scripts/generate-demo.mjs seeded demo data (monthly + daily)
 scripts/gen-us-map.mjs    regenerates us-map.ts from us-atlas
 ```

@@ -3,7 +3,6 @@ import { THEME_COOKIE, readTheme } from "@/lib/theme";
 import { readRange } from "@/lib/range";
 import { getSnapshot } from "@/connectors";
 import { computeMetrics, platformBreakdown } from "@/lib/metrics";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 import {
   compactNumber,
   fullNumber,
@@ -29,10 +28,7 @@ export default async function DashboardPage({
 }) {
   const { platform, range: rangeParam } = await searchParams;
   const range = readRange(rangeParam);
-  const jar = await cookies();
-  const role = await verifySession(jar.get(SESSION_COOKIE)?.value);
-  const theme = readTheme(jar.get(THEME_COOKIE)?.value);
-  const isAdmin = role === "admin";
+  const theme = readTheme((await cookies()).get(THEME_COOKIE)?.value);
 
   const snapshot = await getSnapshot();
   const selected = platform ? platform.split(",").filter(Boolean) : [];
@@ -65,31 +61,10 @@ export default async function DashboardPage({
           </div>
 
           <div className="flex items-center gap-2">
-            <span
-              className="text-xs px-2.5 py-1 rounded-full"
-              style={{
-                background: "var(--surface-2)",
-                color: "var(--text-secondary)",
-              }}
-            >
-              {isAdmin ? "Admin" : "Investor"}
-            </span>
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>
               Updated {utcStamp(snapshot.generatedAt)}
             </span>
             <ThemeToggle initial={theme} />
-            <form action="/api/logout" method="POST">
-              <button
-                type="submit"
-                className="px-2.5 py-1.5 rounded-lg text-xs font-medium"
-                style={{
-                  border: "1px solid var(--border)",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                Sign out
-              </button>
-            </form>
           </div>
         </header>
 
@@ -293,14 +268,13 @@ export default async function DashboardPage({
           </section>
         ) : null}
 
-        {isAdmin ? <SourcesPanel sources={snapshot.sources} /> : null}
+        <SourcesPanel sources={snapshot.sources} />
 
         <footer
           className="text-xs mt-6 text-center"
           style={{ color: "var(--text-muted)" }}
         >
           Pyrotree · generated {utcStamp(snapshot.generatedAt)}
-          {isAdmin ? " · admin view" : ""}
         </footer>
       </div>
     </main>
