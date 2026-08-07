@@ -1,28 +1,32 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-
-type Mode = "system" | "light" | "dark";
-
-const EVENT = "pyrotree-theme-change";
-const KEY = "pyrotree-theme";
+import { useState } from "react";
+import {
+  THEME_COOKIE,
+  THEME_MAX_AGE,
+  type ThemeMode,
+} from "@/lib/theme";
 
 /**
- * Stamps data-theme on <html>; the CSS gives that scope priority over the OS.
- * localStorage is the source of truth and is read through useSyncExternalStore,
- * so there's no mount-time setState. The inline script in layout.tsx has
- * already applied the saved theme before first paint.
+ * Cycles system → light → dark.
+ *
+ * The choice lives in a cookie so the server can stamp `data-theme` on <html>
+ * in the initial HTML — no bootstrap script, no flash, and no hydration
+ * mismatch. The attribute is also updated here directly, so the switch is
+ * instant rather than waiting on a round trip.
  */
-export function ThemeToggle() {
-  const mode = useSyncExternalStore(subscribe, readMode, () => "system" as Mode);
+export function ThemeToggle({ initial }: { initial: ThemeMode }) {
+  const [mode, setMode] = useState<ThemeMode>(initial);
 
-  const next: Mode =
+  const next: ThemeMode =
     mode === "system" ? "light" : mode === "light" ? "dark" : "system";
 
   const change = () => {
-    localStorage.setItem(KEY, next);
-    apply(next);
-    window.dispatchEvent(new Event(EVENT));
+    setMode(next);
+    document.cookie = `${THEME_COOKIE}=${next}; path=/; max-age=${THEME_MAX_AGE}; samesite=lax`;
+    const root = document.documentElement;
+    if (next === "system") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", next);
   };
 
   return (
@@ -39,28 +43,4 @@ export function ThemeToggle() {
       {mode === "system" ? "Auto" : mode === "light" ? "Light" : "Dark"}
     </button>
   );
-}
-
-function subscribe(onChange: () => void) {
-  window.addEventListener(EVENT, onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    window.removeEventListener(EVENT, onChange);
-    window.removeEventListener("storage", onChange);
-  };
-}
-
-function readMode(): Mode {
-  try {
-    const v = localStorage.getItem(KEY);
-    return v === "light" || v === "dark" ? v : "system";
-  } catch {
-    return "system";
-  }
-}
-
-function apply(mode: Mode) {
-  const root = document.documentElement;
-  if (mode === "system") root.removeAttribute("data-theme");
-  else root.setAttribute("data-theme", mode);
 }

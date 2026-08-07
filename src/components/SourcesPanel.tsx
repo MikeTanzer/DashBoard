@@ -1,5 +1,5 @@
 import type { SourceStatus } from "@/lib/types";
-import { relativeTime } from "@/lib/format";
+import { utcTime } from "@/lib/format";
 
 const STATE_STYLE: Record<
   SourceStatus["state"],
@@ -60,7 +60,7 @@ export function SourcesPanel({ sources }: { sources: SourceStatus[] }) {
                       className="text-[11px]"
                       style={{ color: "var(--text-muted)" }}
                     >
-                      {relativeTime(s.fetchedAt)}
+                      {utcTime(s.fetchedAt)}
                       {s.durationMs != null ? ` · ${s.durationMs}ms` : ""}
                     </span>
                   ) : null}

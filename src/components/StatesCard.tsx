@@ -2,7 +2,15 @@
 
 import { useMemo, useRef, useState } from "react";
 import type { StateCount } from "@/lib/metrics";
-import { GRID_COLS, GRID_ROWS, STATE_GRID } from "@/lib/states";
+import { STATE_NAMES } from "@/lib/states";
+import {
+  MAP_HEIGHT,
+  MAP_WIDTH,
+  OUTSET_LABEL_POS,
+  ROOMY,
+  STATE_LABEL_POS,
+  STATE_PATHS,
+} from "@/lib/us-map";
 import { axisTicks, fullNumber, money } from "@/lib/format";
 
 type View = "map" | "bars" | "table";
@@ -125,7 +133,7 @@ export function StatesCard({ data, customersWithoutState }: Props) {
 
       {view === "map" ? (
         <>
-          <Cartogram byCode={byCode} bin={bin} onHover={showTip} onLeave={() => setHover(null)} />
+          <Choropleth byCode={byCode} bin={bin} onHover={showTip} onLeave={() => setHover(null)} />
           <ScaleLegend bins={bins} />
         </>
       ) : view === "bars" ? (
@@ -154,10 +162,15 @@ export function StatesCard({ data, customersWithoutState }: Props) {
 
 /* -------------------------------------------------------------------------- */
 
-const TILE = 40;
-const GAP = 4;
-
-function Cartogram({
+/**
+ * Choropleth over real state geometry (Albers USA — Alaska and Hawaii are
+ * inset at the lower left, at their own scale).
+ *
+ * Only states with customers are labelled; labelling all 51 turns the map into
+ * a wall of text and buries the signal. Small states can't hold a label at all,
+ * so those get one in the right margin with a leader line.
+ */
+function Choropleth({
   byCode,
   bin,
   onHover,
@@ -168,66 +181,104 @@ function Cartogram({
   onHover: (e: React.MouseEvent, s: StateCount) => void;
   onLeave: () => void;
 }) {
-  const w = GRID_COLS * (TILE + GAP);
-  const h = GRID_ROWS * (TILE + GAP);
-
   return (
     <div className="mt-3 overflow-x-auto">
       <svg
-        viewBox={`0 0 ${w} ${h}`}
+        viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
         width="100%"
-        style={{ maxWidth: w, minWidth: 560 }}
+        style={{ maxWidth: MAP_WIDTH, minWidth: 620 }}
         role="img"
-        aria-label="Grid map of US states shaded by customer count"
+        aria-label="Map of the United States, states shaded by customer count"
       >
-        {STATE_GRID.map((cell) => {
-          const stat = byCode.get(cell.code);
+        {/* Shapes first, labels after, so no neighbour paints over a label. */}
+        {Object.entries(STATE_PATHS).map(([code, d]) => {
+          const stat = byCode.get(code);
           const count = stat?.customers ?? 0;
-          const b = bin(count);
           const empty = count <= 0;
-          const x = cell.col * (TILE + GAP);
-          const y = cell.row * (TILE + GAP);
           return (
-            <g
-              key={cell.code}
-              onMouseMove={(e) =>
-                stat ? onHover(e, stat) : undefined
-              }
+            <path
+              key={code}
+              d={d}
+              fill={empty ? "var(--surface-2)" : step(bin(count))}
+              stroke="var(--surface-1)"
+              strokeWidth={1}
+              strokeLinejoin="round"
+              onMouseMove={(e) => (stat ? onHover(e, stat) : undefined)}
               onMouseLeave={onLeave}
-              style={{ cursor: stat ? "default" : "default" }}
             >
-              <rect
-                x={x}
-                y={y}
-                width={TILE}
-                height={TILE}
-                rx={5}
-                fill={empty ? "var(--surface-2)" : step(b)}
-                stroke={empty ? "var(--border)" : "none"}
-                strokeWidth={1}
-              />
-              <text
-                x={x + TILE / 2}
-                y={y + TILE / 2 - 3}
-                textAnchor="middle"
-                fontSize={11}
-                fontWeight={600}
-                fill={empty ? "var(--text-muted)" : ink(b)}
-              >
-                {cell.code}
-              </text>
-              {!empty ? (
+              {/* One expression, not two children — adjacent text nodes
+                  serialize differently on the server and break hydration. */}
+              <title>
+                {`${STATE_NAMES[code] ?? code} — ${
+                  empty
+                    ? "no customers"
+                    : `${count} customer${count === 1 ? "" : "s"}`
+                }`}
+              </title>
+            </path>
+          );
+        })}
+
+        {[...byCode.values()].map((stat) => {
+          const b = bin(stat.customers);
+          const pos = STATE_LABEL_POS[stat.code];
+          if (!pos) return null;
+
+          // Big enough to hold the label — set it straight on the shape.
+          if (ROOMY.has(stat.code)) {
+            return (
+              <g key={stat.code} pointerEvents="none">
                 <text
-                  x={x + TILE / 2}
-                  y={y + TILE / 2 + 11}
+                  x={pos[0]}
+                  y={pos[1] - 2}
                   textAnchor="middle"
-                  fontSize={10}
+                  fontSize={13}
+                  fontWeight={600}
+                  fill={ink(b)}
+                >
+                  {stat.code}
+                </text>
+                <text
+                  x={pos[0]}
+                  y={pos[1] + 12}
+                  textAnchor="middle"
+                  fontSize={12}
                   fill={ink(b)}
                   opacity={0.85}
                 >
-                  {count}
+                  {stat.customers}
                 </text>
-              ) : null}
+              </g>
+            );
+          }
+
+          // Too small — label in the margin, joined by a leader line.
+          const out = OUTSET_LABEL_POS[stat.code];
+          if (!out) return null;
+          const leftOfLabel = out[0] > MAP_WIDTH / 2;
+          return (
+            <g key={stat.code} pointerEvents="none">
+              <line
+                x1={pos[0]}
+                y1={pos[1]}
+                x2={out[0] + (leftOfLabel ? -6 : 6)}
+                y2={out[1] - 4}
+                stroke="var(--axis)"
+                strokeWidth={1}
+              />
+              <circle cx={pos[0]} cy={pos[1]} r={2} fill="var(--axis)" />
+              <text
+                x={out[0]}
+                y={out[1]}
+                textAnchor={leftOfLabel ? "end" : "start"}
+                fontSize={12}
+                fill="var(--text-secondary)"
+              >
+                <tspan fontWeight={600} fill="var(--text-primary)">
+                  {stat.code}
+                </tspan>
+                <tspan dx={4}>{stat.customers}</tspan>
+              </text>
             </g>
           );
         })}

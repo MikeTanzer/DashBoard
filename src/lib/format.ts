@@ -59,13 +59,31 @@ const MONTHS = [
   "Dec",
 ];
 
-export function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
-  if (secs < 60) return "just now";
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  if (secs < 86_400) return `${Math.floor(secs / 3600)}h ago`;
-  return `${Math.floor(secs / 86_400)}d ago`;
+/**
+ * Absolute UTC stamp: "6 Aug 2026, 17:12 UTC".
+ *
+ * Deliberately not `toLocaleString()` and not a relative time. Both of those
+ * are evaluated on the server AND again during hydration, and differ across
+ * the two — `toLocaleString` by the machine's locale and timezone, a relative
+ * time by however many seconds elapsed in between. Either one desynchronises
+ * hydration. Formatting from UTC parts is identical everywhere.
+ */
+export function utcStamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ` +
+    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`
+  );
+}
+
+/** Time only: "17:12 UTC". For dense rows where the date is already implied. */
+export function utcTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
 }
 
 function trim(v: number): string {

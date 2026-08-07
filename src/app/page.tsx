@@ -1,5 +1,5 @@
-import { Suspense } from "react";
 import { cookies } from "next/headers";
+import { THEME_COOKIE, readTheme } from "@/lib/theme";
 import { getSnapshot } from "@/connectors";
 import { computeMetrics, platformBreakdown } from "@/lib/metrics";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
@@ -8,7 +8,7 @@ import {
   fullNumber,
   money,
   percent,
-  relativeTime,
+  utcStamp,
 } from "@/lib/format";
 import { StatTile, NotTracked } from "@/components/StatTile";
 import { StatesCard } from "@/components/StatesCard";
@@ -26,9 +26,9 @@ export default async function DashboardPage({
   searchParams: Promise<{ platform?: string }>;
 }) {
   const { platform } = await searchParams;
-  const role = await verifySession(
-    (await cookies()).get(SESSION_COOKIE)?.value,
-  );
+  const jar = await cookies();
+  const role = await verifySession(jar.get(SESSION_COOKIE)?.value);
+  const theme = readTheme(jar.get(THEME_COOKIE)?.value);
   const isAdmin = role === "admin";
 
   const snapshot = await getSnapshot();
@@ -72,9 +72,9 @@ export default async function DashboardPage({
               {isAdmin ? "Admin" : "Investor"}
             </span>
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-              Updated {relativeTime(snapshot.generatedAt)}
+              Updated {utcStamp(snapshot.generatedAt)}
             </span>
-            <ThemeToggle />
+            <ThemeToggle initial={theme} />
             <form action="/api/logout" method="POST">
               <button
                 type="submit"
@@ -94,56 +94,36 @@ export default async function DashboardPage({
 
         {/* Filters — one row, scoping everything below -------------------- */}
         <div className="mb-6">
-          <Suspense fallback={<div className="h-8" />}>
-            <FilterBar platforms={snapshot.platforms} selected={selected} />
-          </Suspense>
+          <FilterBar platforms={snapshot.platforms} selected={selected} />
         </div>
 
-        {/* Hero — the one number the dashboard leads with ----------------- */}
-        <section className="card p-6 mb-4">
-          <div className="flex flex-wrap items-end justify-between gap-6">
-            <div>
-              <div
-                className="text-[11px] uppercase tracking-wider font-medium"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Monthly recurring revenue · {scopeLabel}
-              </div>
-              {m.monthlyRevenue.available ? (
-                <>
-                  <div className="text-5xl font-semibold leading-none mt-2">
-                    {money(m.monthlyRevenue.value)}
-                  </div>
-                  <div
-                    className="text-sm mt-2"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    {m.annualRunRate.available
-                      ? `${money(m.annualRunRate.value)} annual run rate`
-                      : null}
-                    {m.usageShare.available
-                      ? ` · ${percent(m.usageShare.value)} from usage`
-                      : null}
-                  </div>
-                </>
-              ) : (
-                <div className="mt-2 max-w-md">
-                  <NotTracked needs={m.monthlyRevenue.needs} />
-                </div>
-              )}
-            </div>
-
-            {m.revenueByMonth.available ? (
-              <Sparkline
-                // Drop the month in progress — a half-billed month would draw
-                // a cliff at the right edge of every sparkline.
-                points={m.revenueByMonth.value
-                  .filter((r) => !r.partial)
-                  .map((r) => r.totalCents)}
-              />
-            ) : null}
-          </div>
-        </section>
+        {/* Headline figure and the history behind it, in one card --------- */}
+        <div className="mb-4">
+          {m.monthlyRevenue.available && m.revenueByMonth.available ? (
+            <RevenueCard
+              data={m.revenueByMonth.value}
+              mrrCents={m.monthlyRevenue.value}
+              annualRunRateCents={
+                m.annualRunRate.available ? m.annualRunRate.value : 0
+              }
+              usageShare={m.usageShare.available ? m.usageShare.value : null}
+              scopeLabel={scopeLabel}
+            />
+          ) : (
+            <EmptyCard
+              title="Monthly recurring revenue"
+              // Whichever half is missing is the one worth reporting; MRR is
+              // the more fundamental of the two, so it wins when both are out.
+              needs={
+                !m.monthlyRevenue.available
+                  ? m.monthlyRevenue.needs
+                  : !m.revenueByMonth.available
+                    ? m.revenueByMonth.needs
+                    : ""
+              }
+            />
+          )}
+        </div>
 
         {/* Customer + revenue tiles --------------------------------------- */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
@@ -202,15 +182,9 @@ export default async function DashboardPage({
           />
         </div>
 
-        {/* Charts — full width apiece: both need more room than a half column
-            gives, and a nested horizontal scrollbar reads as a bug. -------- */}
+        {/* The map needs more room than a half column gives, and a nested
+            horizontal scrollbar reads as a bug. ---------------------------- */}
         <div className="grid gap-4 mb-4">
-          {m.revenueByMonth.available ? (
-            <RevenueCard data={m.revenueByMonth.value} />
-          ) : (
-            <EmptyCard title="Monthly revenue" needs={m.revenueByMonth.needs} />
-          )}
-
           {m.customersByState.available ? (
             <StatesCard
               data={m.customersByState.value}
@@ -304,7 +278,7 @@ export default async function DashboardPage({
           className="text-xs mt-6 text-center"
           style={{ color: "var(--text-muted)" }}
         >
-          Pyrotree · generated {new Date(snapshot.generatedAt).toLocaleString()}
+          Pyrotree · generated {utcStamp(snapshot.generatedAt)}
           {isAdmin ? " · admin view" : ""}
         </footer>
       </div>
@@ -348,64 +322,6 @@ function EmptyCard({ title, needs }: { title: string; needs: string }) {
       <h2 className="text-base font-semibold mb-3">{title}</h2>
       <NotTracked needs={needs} />
     </section>
-  );
-}
-
-/** 12-point sparkline: de-emphasised history, current period in the accent. */
-function Sparkline({ points }: { points: number[] }) {
-  const series = points.slice(-12);
-  if (series.length < 2) return null;
-
-  const w = 190;
-  const h = 52;
-  const max = Math.max(...series);
-  const min = Math.min(...series, 0);
-  const span = max - min || 1;
-  const x = (i: number) => (i / (series.length - 1)) * w;
-  const y = (v: number) => h - ((v - min) / span) * h;
-
-  const d = series.map((v, i) => `${i ? "L" : "M"}${x(i)},${y(v)}`).join(" ");
-  const lastX = x(series.length - 1);
-  const lastY = y(series[series.length - 1]);
-
-  return (
-    <div>
-      <svg
-        width={w}
-        height={h + 6}
-        viewBox={`0 0 ${w} ${h + 6}`}
-        role="img"
-        aria-label={`Revenue trend over the last ${series.length} months`}
-      >
-        <path
-          d={`${d} L${w},${h} L0,${h} Z`}
-          fill="var(--series-1)"
-          opacity={0.1}
-        />
-        <path
-          d={d}
-          fill="none"
-          stroke="var(--series-1)"
-          strokeWidth={2}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-        <circle
-          cx={lastX}
-          cy={lastY}
-          r={4}
-          fill="var(--series-1)"
-          stroke="var(--surface-1)"
-          strokeWidth={2}
-        />
-      </svg>
-      <div
-        className="text-[11px] text-right"
-        style={{ color: "var(--text-muted)" }}
-      >
-        last {series.length} months
-      </div>
-    </div>
   );
 }
 
