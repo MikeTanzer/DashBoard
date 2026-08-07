@@ -8,6 +8,8 @@ import type {
 } from "./types";
 import { available, unavailable } from "./types";
 import { STATE_NAMES } from "./states";
+import { dayLabel, monthLabel } from "./format";
+import type { RangeSpec } from "./range";
 
 export interface StateCount {
   code: string;
@@ -32,6 +34,21 @@ export interface DayRevenue {
   usageCents: number;
   totalCents: number;
   /** Today — still accruing. */
+  partial?: boolean;
+}
+
+/**
+ * One plotted column, after the range has chosen which series to read.
+ * Built here rather than in the card so the headline, the tiles and the chart
+ * are all derived from the same slice.
+ */
+export interface Bar {
+  key: string;
+  label: string;
+  full: string;
+  saasCents: number;
+  usageCents: number;
+  totalCents: number;
   partial?: boolean;
 }
 
@@ -61,8 +78,23 @@ export interface DashboardMetrics {
   usageShare: Metric<number>;
   revenueByMonth: Metric<MonthRevenue[]>;
   revenueByDay: Metric<DayRevenue[]>;
-  revenueMoMChange: Metric<number>;
   annualRunRate: Metric<number>;
+
+  // --- Scoped to the selected time range ---------------------------------
+  /** The columns the chart plots for this range. */
+  bars: Metric<Bar[]>;
+  /** Sum of `bars` — the headline figure. */
+  windowTotal: Metric<number>;
+  windowUsageShare: Metric<number>;
+  /** This window vs the immediately preceding window of equal length. */
+  revenueChange: Metric<number>;
+  /** Customers whose first payment landed inside the window. */
+  newCustomers: Metric<number>;
+  /** States that gained their first customer inside the window. */
+  newStates: Metric<number>;
+  /** Consumer purchasers, on whichever fixed window fits the range. */
+  consumersPurchased: Metric<number>;
+  consumerWindowDays: 30 | 180;
 
   // Consumers
   consumersTracked: Metric<number>;
@@ -90,6 +122,7 @@ const NEEDS_REVENUE_HISTORY =
 export function computeMetrics(
   snapshot: Snapshot,
   platformFilter: PlatformId[] | null,
+  range: RangeSpec,
 ): DashboardMetrics {
   const inScope = (p: PlatformId) =>
     !platformFilter || platformFilter.length === 0 || platformFilter.includes(p);
@@ -154,16 +187,6 @@ export function computeMetrics(
     .sort((a, b) => a.month.localeCompare(b.month))
     .map((m) => (m.month === thisMonth ? { ...m, partial: true } : m));
 
-  // Month-over-month compares the last two COMPLETE months. Including the
-  // month in progress would show a fake decline that recovers by month end.
-  const complete = months.filter((m) => !m.partial);
-  const mom = (() => {
-    if (complete.length < 2) return unavailable(NEEDS_REVENUE_HISTORY);
-    const last = complete[complete.length - 1];
-    const prev = complete[complete.length - 2];
-    if (prev.totalCents === 0) return unavailable(NEEDS_REVENUE_HISTORY);
-    return available((last.totalCents - prev.totalCents) / prev.totalCents);
-  })();
 
   // --- Daily revenue --------------------------------------------------------
   // Only sources with timestamped transactions produce this. When it's absent
@@ -186,6 +209,93 @@ export function computeMetrics(
   const days = [...dayMap.values()]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((d) => (d.date === today ? { ...d, partial: true } : d));
+
+  // --- The selected window --------------------------------------------------
+  // Everything range-scoped is derived from this one slice, so the headline,
+  // the tiles and the chart cannot drift apart.
+  const dayGrain = range.grain === "day";
+  const source: (MonthRevenue | DayRevenue)[] = dayGrain ? days : months;
+  const dailyMissing = dayGrain && days.length === 0;
+
+  const take = range.count === Infinity ? source.length : range.count;
+  const windowRows = source.slice(-take);
+
+  const toBar = (r: MonthRevenue | DayRevenue): Bar => {
+    const isDay = "date" in r;
+    const key = isDay ? r.date : r.month;
+    return {
+      key,
+      label: isDay ? dayLabel(key) : monthLabel(key, spansYears(windowRows)),
+      full: isDay ? dayLabel(key, true) : monthLabel(key, true),
+      saasCents: r.saasCents,
+      usageCents: r.usageCents,
+      totalCents: r.totalCents,
+      partial: r.partial,
+    };
+  };
+
+  const bars = windowRows.map(toBar);
+  const windowSum = sumBy(windowRows, (r) => r.totalCents);
+  const windowUsageSum = sumBy(windowRows, (r) => r.usageCents);
+
+  /**
+   * Period-over-period, on COMPLETE buckets only.
+   *
+   * The plotted window deliberately includes the period in progress — you want
+   * to see the month accruing. The comparison must not: a 3-month window whose
+   * newest month is 7 days old, measured against three whole months, reports a
+   * double-digit collapse that isn't happening. So this drops partial buckets
+   * from both sides and compares equal numbers of finished periods.
+   */
+  const completeRows = source.filter((r) => !r.partial);
+  const cmpTake = range.count === Infinity ? completeRows.length : range.count;
+  const cmpWindow = completeRows.slice(-cmpTake);
+  const cmpPrior = completeRows.slice(-(cmpTake * 2), -cmpTake);
+  const cmpWindowSum = sumBy(cmpWindow, (r) => r.totalCents);
+  const cmpPriorSum = sumBy(cmpPrior, (r) => r.totalCents);
+
+  const revenueChange = dailyMissing
+    ? unavailable(NEEDS_DAILY_REVENUE)
+    : cmpPrior.length === cmpTake && cmpWindow.length === cmpTake && cmpPriorSum > 0
+      ? available((cmpWindowSum - cmpPriorSum) / cmpPriorSum)
+      : unavailable(
+          `Needs ${cmpTake * 2} complete ${dayGrain ? "days" : "months"} of history to compare this window against the one before it. There ${completeRows.length === 1 ? "is" : "are"} ${completeRows.length}.`,
+        );
+
+  // --- New customers in the window -----------------------------------------
+  // Exact: `startedAt` is the first payment date. Note this is arrivals, not
+  // net growth — no source gives us cancellation dates yet, so churn can't be
+  // subtracted and a "customers as of date X" series would only ever rise.
+  const windowStart =
+    range.days === Infinity
+      ? "0000-00-00"
+      : new Date(Date.now() - range.days * 86_400_000)
+          .toISOString()
+          .slice(0, 10);
+
+  const datedCustomers = customers.filter((c) => c.startedAt);
+  const arrived = datedCustomers.filter((c) => c.startedAt! >= windowStart);
+
+  const newCustomers = datedCustomers.length
+    ? available(arrived.length)
+    : unavailable(
+        "Needs a start date per customer. Stripe supplies it from the subscription; the admin API can send `startedAt`.",
+      );
+
+  // A state counts as new when its EARLIEST customer landed in the window.
+  const firstSeen = new Map<string, string>();
+  for (const c of datedCustomers) {
+    if (!c.state) continue;
+    const prev = firstSeen.get(c.state);
+    if (!prev || c.startedAt! < prev) firstSeen.set(c.state, c.startedAt!);
+  }
+  const newStates = datedCustomers.length
+    ? available(
+        [...firstSeen.values()].filter((d) => d >= windowStart).length,
+      )
+    : unavailable(
+        "Needs a start date per customer, to know when a state was first entered.",
+      );
 
   // --- Consumers ------------------------------------------------------------
   const hasConsumers = consumers.length > 0;
@@ -259,7 +369,25 @@ export function computeMetrics(
       ? available(days)
       : unavailable(NEEDS_DAILY_REVENUE),
 
-    revenueMoMChange: mom,
+    bars: dailyMissing ? unavailable(NEEDS_DAILY_REVENUE) : available(bars),
+    windowTotal: dailyMissing
+      ? unavailable(NEEDS_DAILY_REVENUE)
+      : available(windowSum),
+    windowUsageShare:
+      !dailyMissing && windowSum > 0
+        ? available(windowUsageSum / windowSum)
+        : unavailable(NEEDS_DAILY_REVENUE),
+    revenueChange,
+    newCustomers,
+    newStates,
+
+    // Consumer purchase counts exist for exactly two windows, defined by the
+    // source query. The range picks whichever is the honest match rather than
+    // interpolating a number nobody measured.
+    consumersPurchased: hasConsumers
+      ? available(range.consumerWindow === 30 ? p30 : p180)
+      : unavailable(NEEDS_CONSUMERS),
+    consumerWindowDays: range.consumerWindow,
 
     annualRunRate: hasCustomers
       ? available(totalCents * 12)
@@ -346,6 +474,18 @@ export function platformBreakdown(snapshot: Snapshot): PlatformRow[] {
   return [...rows.values()]
     .filter((r) => r.customers > 0 || r.consumersTracked !== null)
     .sort((a, b) => b.mrrCents - a.mrrCents);
+}
+
+/** Do the rows in view straddle a year boundary? Controls the axis label. */
+function spansYears(rows: (MonthRevenue | DayRevenue)[]): boolean {
+  const years = new Set(
+    rows.map((r) => ("date" in r ? r.date : r.month).slice(0, 4)),
+  );
+  return years.size > 1;
+}
+
+function sumBy<T>(list: T[], pick: (r: T) => number) {
+  return list.reduce((acc, r) => acc + pick(r), 0);
 }
 
 function sum(list: CustomerRecord[], pick: (c: CustomerRecord) => number) {

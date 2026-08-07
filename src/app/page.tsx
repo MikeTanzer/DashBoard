@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { THEME_COOKIE, readTheme } from "@/lib/theme";
+import { readRange } from "@/lib/range";
 import { getSnapshot } from "@/connectors";
 import { computeMetrics, platformBreakdown } from "@/lib/metrics";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
@@ -15,6 +16,7 @@ import { StatesCard } from "@/components/StatesCard";
 import { RevenueCard } from "@/components/RevenueCard";
 import { SourcesPanel } from "@/components/SourcesPanel";
 import { FilterBar } from "@/components/FilterBar";
+import { RangePicker } from "@/components/RangePicker";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Logo } from "@/components/Logo";
 
@@ -23,9 +25,10 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ platform?: string }>;
+  searchParams: Promise<{ platform?: string; range?: string }>;
 }) {
-  const { platform } = await searchParams;
+  const { platform, range: rangeParam } = await searchParams;
+  const range = readRange(rangeParam);
   const jar = await cookies();
   const role = await verifySession(jar.get(SESSION_COOKIE)?.value);
   const theme = readTheme(jar.get(THEME_COOKIE)?.value);
@@ -33,7 +36,7 @@ export default async function DashboardPage({
 
   const snapshot = await getSnapshot();
   const selected = platform ? platform.split(",").filter(Boolean) : [];
-  const m = computeMetrics(snapshot, selected.length ? selected : null);
+  const m = computeMetrics(snapshot, selected.length ? selected : null, range);
   const platforms = platformBreakdown(snapshot);
 
   const scopeLabel =
@@ -92,63 +95,84 @@ export default async function DashboardPage({
 
         {snapshot.demo ? <DemoBanner /> : null}
 
-        {/* Filters — one row, scoping everything below -------------------- */}
-        <div className="mb-6">
-          <FilterBar platforms={snapshot.platforms} selected={selected} />
+        {/* One control row, scoping everything below --------------------- */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <FilterBar
+            platforms={snapshot.platforms}
+            selected={selected}
+            range={range.id}
+          />
+          <RangePicker range={range.id} platform={selected} />
         </div>
 
         {/* Headline figure and the history behind it, in one card --------- */}
         <div className="mb-4">
-          {m.monthlyRevenue.available && m.revenueByMonth.available ? (
+          {m.monthlyRevenue.available ? (
             <RevenueCard
-              data={m.revenueByMonth.value}
-              daily={m.revenueByDay}
+              bars={m.bars.available ? m.bars.value : []}
+              windowTotalCents={m.windowTotal.available ? m.windowTotal.value : 0}
+              windowUsageShare={
+                m.windowUsageShare.available ? m.windowUsageShare.value : null
+              }
               mrrCents={m.monthlyRevenue.value}
               annualRunRateCents={
                 m.annualRunRate.available ? m.annualRunRate.value : 0
               }
+              range={range}
               scopeLabel={scopeLabel}
+              unavailableReason={m.bars.available ? undefined : m.bars.needs}
             />
           ) : (
             <EmptyCard
               title="Monthly recurring revenue"
-              // Whichever half is missing is the one worth reporting; MRR is
-              // the more fundamental of the two, so it wins when both are out.
-              needs={
-                !m.monthlyRevenue.available
-                  ? m.monthlyRevenue.needs
-                  : !m.revenueByMonth.available
-                    ? m.revenueByMonth.needs
-                    : ""
-              }
+              needs={m.monthlyRevenue.needs}
             />
           )}
         </div>
 
         {/* Row 1 — reach: how much of the market we touch ------------------ */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
+          {/* The count is a live total — without cancellation dates we can't
+              rebuild it for a past date, and a rising-only line would be a lie.
+              The range drives arrivals, which we CAN compute exactly. */}
           <StatTile
             label="Current customers"
             metric={m.customerCount}
             format={fullNumber}
+            hint={
+              m.newCustomers.available
+                ? `+${fullNumber(m.newCustomers.value)} new in the ${range.window}`
+                : undefined
+            }
           />
           <StatTile
             label="States with customers"
             metric={m.stateCount}
             format={(v) => `${v} of 51`}
+            hint={
+              m.newStates.available
+                ? m.newStates.value > 0
+                  ? `+${m.newStates.value} entered in the ${range.window}`
+                  : `No new states in the ${range.window}`
+                : undefined
+            }
           />
+          {/* A single running total with no time dimension in the source. */}
           <StatTile
             label="Consumers tracked"
             metric={m.consumersTracked}
             format={compactNumber}
+            hint="All time — the source keeps no history"
           />
+          {/* Purchase counts exist for exactly two windows, so this snaps to
+              whichever the range is closer to rather than interpolating. */}
           <StatTile
-            label="Purchased in last 30 days"
-            metric={m.consumersPurchased30d}
+            label={`Purchased in last ${m.consumerWindowDays} days`}
+            metric={m.consumersPurchased}
             format={compactNumber}
             hint={
-              m.consumerActivation30d.available
-                ? `${percent(m.consumerActivation30d.value, 1)} of tracked consumers`
+              m.consumersPurchased.available && m.consumersTracked.available
+                ? `${percent(m.consumersPurchased.value / m.consumersTracked.value, 1)} of tracked consumers`
                 : undefined
             }
           />
@@ -173,13 +197,9 @@ export default async function DashboardPage({
           />
           <StatTile
             label="Revenue change"
-            metric={
-              m.revenueMoMChange.available
-                ? { available: true, value: m.revenueMoMChange.value }
-                : m.revenueMoMChange
-            }
+            metric={m.revenueChange}
             format={(v) => `${v >= 0 ? "+" : ""}${percent(v, 1)}`}
-            hint="Latest full month vs the one before"
+            hint={`Complete periods only · vs the ${range.window.replace("last ", "")} before`}
           />
         </div>
 

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import type { Platform } from "@/lib/types";
+import { DEFAULT_RANGE, type RangeId } from "@/lib/range";
 
 /**
  * One filter row above everything it scopes — every card re-renders against the
@@ -17,9 +18,12 @@ import type { Platform } from "@/lib/types";
 export function FilterBar({
   platforms,
   selected,
+  range,
 }: {
   platforms: Platform[];
   selected: string[];
+  /** Carried through so changing platform doesn't reset the time range. */
+  range: RangeId;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -27,8 +31,11 @@ export function FilterBar({
   const all = selected.length === 0;
 
   const setPlatforms = (next: string[]) => {
-    const query = next.length ? `?platform=${next.join(",")}` : "";
-    startTransition(() => router.push(`/${query}`, { scroll: false }));
+    const params = new URLSearchParams();
+    if (next.length) params.set("platform", next.join(","));
+    if (range !== DEFAULT_RANGE) params.set("range", range);
+    const qs = params.toString();
+    startTransition(() => router.push(qs ? `/?${qs}` : "/", { scroll: false }));
   };
 
   const toggle = (id: string) => {

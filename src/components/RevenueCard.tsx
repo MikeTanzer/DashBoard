@@ -1,93 +1,46 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import type { DayRevenue, MonthRevenue } from "@/lib/metrics";
-import type { Metric } from "@/lib/types";
-import {
-  axisTicks,
-  compactMoney,
-  dayLabel,
-  monthLabel,
-  money,
-  percent,
-} from "@/lib/format";
+import { useRef, useState } from "react";
+import type { Bar } from "@/lib/metrics";
+import type { RangeSpec } from "@/lib/range";
+import { axisTicks, compactMoney, money, percent } from "@/lib/format";
 import { NotTracked } from "./StatTile";
 
 type View = "chart" | "table";
 
-/**
- * Trailing windows. 3 months is the default — the operating view.
- *
- * The two short ranges are DAY-grained and read a different series: a week has
- * no meaning in monthly buckets, and resampling months into days would invent
- * a shape the data never had. Only sources with timestamped transactions
- * (Stripe, the admin API) can supply it, so these two ranges degrade to the
- * usual "Not yet tracked" copy when nothing does.
- */
-const RANGES = [
-  { id: "1w", label: "1W", grain: "day", count: 7, window: "last 7 days" },
-  { id: "1m", label: "1M", grain: "day", count: 30, window: "last 30 days" },
-  { id: "3m", label: "3M", grain: "month", count: 3, window: "last 3 months" },
-  { id: "6m", label: "6M", grain: "month", count: 6, window: "last 6 months" },
-  {
-    id: "12m",
-    label: "12M",
-    grain: "month",
-    count: 12,
-    window: "last 12 months",
-  },
-  {
-    id: "all",
-    label: "All",
-    grain: "month",
-    count: Infinity,
-    window: "all time",
-  },
-] as const;
-
-type RangeId = (typeof RANGES)[number]["id"];
-
-/** What the chart actually plots, once the range has picked a series. */
-interface Bar {
-  key: string;
-  label: string;
-  saasCents: number;
-  usageCents: number;
-  totalCents: number;
-  partial?: boolean;
-  /** Long form for the tooltip and the table. */
-  full: string;
-}
-
 interface Props {
-  data: MonthRevenue[];
-  daily: Metric<DayRevenue[]>;
-  /** Current MRR in cents — a point-in-time figure, so the range doesn't move it. */
+  /** Already sliced to the selected range by computeMetrics. */
+  bars: Bar[];
+  windowTotalCents: number;
+  windowUsageShare: number | null;
+  /** Point-in-time rates — a window can't change them. */
   mrrCents: number;
   annualRunRateCents: number;
+  range: RangeSpec;
   scopeLabel: string;
+  /** Set when the range needs day-level data and no source supplies it. */
+  unavailableReason?: string;
 }
 
 /**
- * The headline figure and the history it came from, in one card.
+ * The headline figure and the history behind it, in one card.
  *
- * The headline is the total of whatever the range has plotted, so it tracks the
- * time-period buttons. MRR and run rate sit in the supporting line: those are
- * point-in-time rates and a window can't change them.
- *
- * Two series → the legend is always present. Stacked segments are separated by
- * a 2px surface gap rather than a stroke, and only the last complete month is
- * direct-labelled; the axis and the tooltip carry the rest.
+ * This component only renders — the windowing lives in computeMetrics so the
+ * headline, the tiles and the chart are all read off one slice and cannot
+ * disagree. The range picker itself sits in the page header now, since it
+ * scopes far more than this card.
  */
 export function RevenueCard({
-  data,
-  daily,
+  bars,
+  windowTotalCents,
+  windowUsageShare,
   mrrCents,
   annualRunRateCents,
+  range,
   scopeLabel,
+  unavailableReason,
 }: Props) {
   const [view, setView] = useState<View>("chart");
-  const [range, setRange] = useState<RangeId>("3m");
   const [hover, setHover] = useState<{
     x: number;
     y: number;
@@ -95,75 +48,35 @@ export function RevenueCard({
   } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  const spec = RANGES.find((r) => r.id === range)!;
-  const dayGrain = spec.grain === "day";
-  const dailyMissing = dayGrain && !daily.available;
-
-  const months = useMemo<Bar[]>(() => {
-    if (dayGrain) {
-      if (!daily.available) return [];
-      return daily.value.slice(-spec.count).map((d) => ({
-        key: d.date,
-        label: dayLabel(d.date),
-        saasCents: d.saasCents,
-        usageCents: d.usageCents,
-        totalCents: d.totalCents,
-        partial: d.partial,
-        full: dayLabel(d.date, true),
-      }));
-    }
-    const src = spec.count === Infinity ? data : data.slice(-spec.count);
-    const lastYear = src[src.length - 1]?.month.slice(0, 4);
-    const spansYears = new Set(src.map((m) => m.month.slice(0, 4))).size > 1;
-    return src.map((m) => ({
-      key: m.month,
-      label: monthLabel(
-        m.month,
-        spansYears && m.month.slice(0, 4) !== lastYear,
-      ),
-      saasCents: m.saasCents,
-      usageCents: m.usageCents,
-      totalCents: m.totalCents,
-      partial: m.partial,
-      full: monthLabel(m.month, true),
-    }));
-  }, [data, daily, dayGrain, spec]);
+  const dayGrain = range.grain === "day";
 
   // Fixed viewBox with the slots dividing it, so a 12-month view fills the
   // card. Slot width is capped and the group centred, so a 3-month view shows
-  // three columns together rather than three specks marooned across a metre of
-  // plot. Bars stay thin — the cap is on the slot, not the mark.
+  // three columns together rather than specks strung across the plot.
   const PLOT_H = 210;
   const AXIS_H = 26;
-  // Headroom above the plot: the top gridline's label is centred on y=0 and the
-  // direct value label sits 8px above its column, so both get clipped by the
-  // viewBox edge without it.
+  // Headroom: the top gridline label is centred on y=0 and the direct value
+  // label sits 8px above its column — both clip on the viewBox edge without it.
   const TOP_PAD = 20;
   const LEFT = 64;
   const RIGHT = 12;
   const VB_W = 1100;
   const SLOT_MAX = 104;
 
-  const n = Math.max(1, months.length);
+  const n = Math.max(1, bars.length);
   const plotW = VB_W - LEFT - RIGHT;
   const slot = Math.min(plotW / n, SLOT_MAX);
   const startX = LEFT + (plotW - slot * n) / 2;
   const barW = Math.min(24, Math.max(10, slot * 0.4));
   const h = TOP_PAD + PLOT_H + AXIS_H;
 
-  const max = Math.max(1, ...months.map((m) => m.totalCents));
+  const max = Math.max(1, ...bars.map((b) => b.totalCents));
   const ticks = axisTicks(max, 4);
   const scaleMax = ticks[ticks.length - 1] || max;
   const yOf = (cents: number) => PLOT_H - (cents / scaleMax) * PLOT_H;
 
-  const hasPartial = months.some((m) => m.partial);
-  const lastComplete = [...months].reverse().find((m) => !m.partial)?.key;
-
-  // The headline is the sum of what's plotted, so it moves with the range.
-  // MRR stays in the supporting line — it's a point-in-time rate, and a time
-  // window can't change it.
-  const windowTotal = months.reduce((a, m) => a + m.totalCents, 0);
-  const windowUsage = months.reduce((a, m) => a + m.usageCents, 0);
+  const hasPartial = bars.some((b) => b.partial);
+  const lastComplete = [...bars].reverse().find((b) => !b.partial)?.key;
 
   const showTip = (e: React.MouseEvent, point: Bar) => {
     const rect = wrapRef.current?.getBoundingClientRect();
@@ -184,38 +97,32 @@ export function RevenueCard({
             className="text-[11px] uppercase tracking-wider font-medium"
             style={{ color: "var(--text-muted)" }}
           >
-            {dailyMissing
+            {unavailableReason
               ? `Revenue · ${scopeLabel}`
-              : `Revenue collected · ${spec.window} · ${scopeLabel}`}
+              : `Revenue collected · ${range.window} · ${scopeLabel}`}
           </div>
           <div className="text-5xl font-semibold leading-none mt-2 tracking-tight">
-            {dailyMissing ? "—" : money(windowTotal)}
+            {unavailableReason ? "—" : money(windowTotalCents)}
           </div>
           <div
             className="text-sm mt-2"
             style={{ color: "var(--text-secondary)" }}
           >
-            {!dailyMissing && windowTotal > 0
-              ? `${percent(windowUsage / windowTotal)} from usage · `
+            {windowUsageShare !== null && !unavailableReason
+              ? `${percent(windowUsageShare)} from usage · `
               : ""}
             {money(mrrCents)} MRR · {money(annualRunRateCents)} annual run rate
           </div>
-          {hasPartial && !dailyMissing ? (
-            <div
-              className="text-xs mt-1"
-              style={{ color: "var(--text-muted)" }}
-            >
+          {hasPartial && !unavailableReason ? (
+            <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
               Includes {dayGrain ? "today" : "this month"}, still in progress
             </div>
           ) : null}
         </div>
 
-        <div className="flex flex-col items-end gap-2.5">
-          <RangePicker range={range} onChange={setRange} />
-          <div className="flex items-center gap-4">
-            <Legend />
-            <ViewToggle view={view} onChange={setView} />
-          </div>
+        <div className="flex items-center gap-4">
+          <Legend />
+          <ViewToggle view={view} onChange={setView} />
         </div>
       </div>
 
@@ -227,15 +134,17 @@ export function RevenueCard({
           <h2 className="text-sm font-semibold">
             Collected revenue by {dayGrain ? "day" : "month"}
           </h2>
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-            {months.length} {dayGrain ? "day" : "month"}
-            {months.length === 1 ? "" : "s"}
-          </span>
+          {!unavailableReason ? (
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              {bars.length} {dayGrain ? "day" : "month"}
+              {bars.length === 1 ? "" : "s"}
+            </span>
+          ) : null}
         </div>
 
-        {dailyMissing ? (
+        {unavailableReason ? (
           <div className="py-2">
-            <NotTracked needs={daily.available ? "" : daily.needs} />
+            <NotTracked needs={unavailableReason} />
           </div>
         ) : view === "chart" ? (
           <div className="overflow-x-auto">
@@ -267,21 +176,20 @@ export function RevenueCard({
                   </g>
                 ))}
 
-                {months.map((m) => {
-                  const i = months.indexOf(m);
+                {bars.map((b, i) => {
                   const cx = startX + i * slot + slot / 2;
                   const x = cx - barW / 2;
-                  const usageTop = yOf(m.usageCents);
+                  const usageTop = yOf(b.usageCents);
                   const usageH = PLOT_H - usageTop;
                   // 2px surface gap, taken off the bottom of the SaaS segment.
-                  const saasTop = yOf(m.totalCents);
+                  const saasTop = yOf(b.totalCents);
                   const saasH = Math.max(0, usageTop - 2 - saasTop);
 
                   return (
                     <g
-                      key={m.key}
-                      opacity={m.partial ? 0.5 : 1}
-                      onMouseMove={(e) => showTip(e, m)}
+                      key={b.key}
+                      opacity={b.partial ? 0.5 : 1}
+                      onMouseMove={(e) => showTip(e, b)}
                       onMouseLeave={() => setHover(null)}
                     >
                       <rect
@@ -308,7 +216,7 @@ export function RevenueCard({
                           className="texture-a"
                         />
                       ) : null}
-                      {lastComplete === m.key ? (
+                      {lastComplete === b.key ? (
                         <text
                           x={cx}
                           y={saasTop - 8}
@@ -317,7 +225,7 @@ export function RevenueCard({
                           fontWeight={600}
                           fill="var(--text-primary)"
                         >
-                          {compactMoney(m.totalCents)}
+                          {compactMoney(b.totalCents)}
                         </text>
                       ) : null}
                       <text
@@ -326,8 +234,8 @@ export function RevenueCard({
                         y={PLOT_H + 17}
                         textAnchor="middle"
                       >
-                        {m.label}
-                        {m.partial ? "*" : ""}
+                        {b.label}
+                        {b.partial ? "*" : ""}
                       </text>
                     </g>
                   );
@@ -380,12 +288,10 @@ export function RevenueCard({
               </defs>
             </svg>
             {hasPartial ? (
-              <p
-                className="text-xs mt-2"
-                style={{ color: "var(--text-muted)" }}
-              >
-                * {dayGrain ? "Today" : "Month"} still in progress — shown
-                faded, and excluded from the month-over-month figure.
+              <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+                * {dayGrain ? "Today" : "This month"} is still in progress —
+                shown faded, and it holds the total below a like-for-like
+                comparison.
               </p>
             ) : null}
           </div>
@@ -401,20 +307,20 @@ export function RevenueCard({
                 </tr>
               </thead>
               <tbody>
-                {[...months].reverse().map((m) => (
-                  <tr key={m.key}>
+                {[...bars].reverse().map((b) => (
+                  <tr key={b.key}>
                     <td>
-                      {m.full}
-                      {m.partial ? (
+                      {b.full}
+                      {b.partial ? (
                         <span style={{ color: "var(--text-muted)" }}>
                           {" "}
                           · in progress
                         </span>
                       ) : null}
                     </td>
-                    <td className="num">{money(m.saasCents)}</td>
-                    <td className="num">{money(m.usageCents)}</td>
-                    <td className="num">{money(m.totalCents)}</td>
+                    <td className="num">{money(b.saasCents)}</td>
+                    <td className="num">{money(b.usageCents)}</td>
+                    <td className="num">{money(b.totalCents)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -423,7 +329,7 @@ export function RevenueCard({
         )}
       </div>
 
-      {hover && view === "chart" ? (
+      {hover && view === "chart" && !unavailableReason ? (
         <div className="viz-tooltip" style={{ left: hover.x, top: hover.y }}>
           <div className="font-semibold">
             {hover.point.full}
@@ -458,39 +364,6 @@ export function RevenueCard({
 }
 
 /* -------------------------------------------------------------------------- */
-
-function RangePicker({
-  range,
-  onChange,
-}: {
-  range: RangeId;
-  onChange: (r: RangeId) => void;
-}) {
-  return (
-    <div
-      className="flex rounded-lg overflow-hidden"
-      role="group"
-      aria-label="Time range"
-      style={{ border: "1px solid var(--border)" }}
-    >
-      {RANGES.map((r) => (
-        <button
-          key={r.id}
-          onClick={() => onChange(r.id)}
-          aria-pressed={range === r.id}
-          className="px-3 py-1.5 text-xs font-medium"
-          style={{
-            background: range === r.id ? "var(--surface-2)" : "transparent",
-            color:
-              range === r.id ? "var(--text-primary)" : "var(--text-secondary)",
-          }}
-        >
-          {r.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function Legend() {
   return (
@@ -550,8 +423,7 @@ function ViewToggle({
           className="px-3 py-1.5 text-xs font-medium"
           style={{
             background: view === id ? "var(--surface-2)" : "transparent",
-            color:
-              view === id ? "var(--text-primary)" : "var(--text-secondary)",
+            color: view === id ? "var(--text-primary)" : "var(--text-secondary)",
           }}
         >
           {label}
