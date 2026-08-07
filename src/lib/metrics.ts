@@ -18,6 +18,8 @@ export interface StateCount {
   mrrCents: number;
   /** Tracked consumers in this state — null when no source breaks them down. */
   consumers: number | null;
+  /** GMV in this state over the selected window — null when unavailable. */
+  gmvCents: number | null;
 }
 
 export interface MonthRevenue {
@@ -129,6 +131,8 @@ export interface DashboardMetrics {
   /** Exclusive recency slices of the consumer base. */
   consumerRecency: Metric<RecencyBand[]>;
 
+  /** Why per-state GMV is missing, when it is. null when it's shown. */
+  stateGmvUnavailable: string | null;
   /** GMV over the selected window — shopper spend, not our revenue. */
   gmvWindow: Metric<number>;
   /** Our revenue as a share of that GMV, when both are known. */
@@ -198,6 +202,7 @@ export function computeMetrics(
       customers: 0,
       mrrCents: 0,
       consumers: null as number | null,
+      gmvCents: null as number | null,
     };
     entry.customers++;
     entry.mrrCents += c.mrrSaasCents + c.mrrUsageCents;
@@ -523,6 +528,54 @@ export function computeMetrics(
     return total;
   })();
 
+  // --- GMV per state --------------------------------------------------------
+  // Summed over the SAME months the window covers, so a state's GMV and the
+  // headline GMV always describe one period. Day-grained windows are excluded
+  // rather than approximated: the per-state split only exists monthly.
+  const stateGmvUnavailable: string | null = (() => {
+    if (dayGrain) {
+      return "Per-state GMV is monthly; switch to a 3M window or wider to see it.";
+    }
+    const anySplit = snapshot.gmv.some(
+      (g) => g.byState && Object.keys(g.byState).length > 0,
+    );
+    if (!anySplit) {
+      return "not tracked by state";
+    }
+    return null;
+  })();
+
+  if (!stateGmvUnavailable) {
+    const windowMonthKeys = new Set<string>();
+    for (const monthKey of gmvMonths.keys()) {
+      const inIt = windowRows.some((r) => {
+        const k = "date" in r ? r.date : r.month;
+        if (k.includes("-Q")) {
+          const [y, q] = k.split("-Q");
+          const mm = Number(monthKey.split("-")[1]);
+          return monthKey.startsWith(y) && Math.floor((mm - 1) / 3) + 1 === Number(q);
+        }
+        if (k.length === 4) return monthKey.startsWith(k);
+        return k === monthKey;
+      });
+      if (inIt) windowMonthKeys.add(monthKey);
+    }
+
+    const perState = new Map<string, number>();
+    for (const g of snapshot.gmv) {
+      if (!inScope(g.platform) || !windowMonthKeys.has(g.month)) continue;
+      for (const [code, amount] of Object.entries(g.byState ?? {})) {
+        if (typeof amount === "number" && Number.isFinite(amount)) {
+          perState.set(code, (perState.get(code) ?? 0) + amount);
+        }
+      }
+    }
+    for (const entry of byState.values()) {
+      const v = perState.get(entry.code);
+      if (v !== undefined) entry.gmvCents = v;
+    }
+  }
+
   // --- Cash ------------------------------------------------------------------
   // Deliberately NOT filtered by platform or range: a bank balance belongs to
   // the company, not to a product line or a date window.
@@ -535,6 +588,7 @@ export function computeMetrics(
   const cashAsOf = cashDates.length ? cashDates[0] : null;
 
   return {
+    stateGmvUnavailable,
     gmvWindow:
       gmvWindowTotal === null
         ? unavailable(dailyMissing ? NEEDS_DAILY_REVENUE : NEEDS_GMV)

@@ -66,7 +66,7 @@ export function FilterBar({
 
   return (
     <div
-      className="flex flex-wrap items-center gap-2"
+      className="control-scroll flex flex-wrap items-center gap-2"
       style={{ opacity: pending ? 0.6 : 1, transition: "opacity 120ms" }}
     >
       <span className="eyebrow mr-1">Platform</span>

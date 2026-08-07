@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RecencyBand } from "@/lib/metrics";
 import { compactNumber, fullNumber, percent } from "@/lib/format";
 
@@ -57,12 +57,24 @@ export function ConsumerPie({
   const fill = (b: RecencyBand) =>
     b.step === null ? "var(--surface-sunken)" : `var(--seq-${b.step})`;
 
-  const move = (e: React.MouseEvent, key: string) => {
+  const move = (e: React.PointerEvent | React.MouseEvent, key: string) => {
     const rect = wrapRef.current?.getBoundingClientRect();
     if (!rect) return;
     setActive(key);
     setTip({ x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
+
+  useEffect(() => {
+    if (!tip) return;
+    const away = (e: PointerEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) {
+        setTip(null);
+        setActive(null);
+      }
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [tip]);
 
   const hovered = bands.find((b) => b.key === active);
 
@@ -115,7 +127,8 @@ export function ConsumerPie({
                 fill={fill(band)}
                 opacity={active && active !== band.key ? 0.45 : 1}
                 style={{ transition: "opacity 130ms ease" }}
-                onMouseMove={(e) => move(e, band.key)}
+                onPointerMove={(e) => move(e, band.key)}
+                onPointerDown={(e) => move(e, band.key)}
               />
             ))}
 

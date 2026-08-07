@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { RecencyBand, StateCount } from "@/lib/metrics";
 import { ConsumerPie } from "./ConsumerPie";
 import { STATE_NAMES } from "@/lib/states";
@@ -12,13 +12,24 @@ import {
   STATE_LABEL_POS,
   STATE_PATHS,
 } from "@/lib/us-map";
-import { axisTicks, compactNumber, fullNumber, money } from "@/lib/format";
+import {
+  axisTicks,
+  compactMoney,
+  compactNumber,
+  fullNumber,
+  money,
+} from "@/lib/format";
+import { useElementWidth } from "@/lib/useElementWidth";
 
 type View = "map" | "bars" | "table";
 
 interface Props {
   data: StateCount[];
   customersWithoutState: number;
+  /** Window label for the GMV row, so the period is never ambiguous. */
+  gmvWindowLabel?: string;
+  /** Set when per-state GMV can't be shown, with the reason. */
+  gmvUnavailable?: string | null;
   /** Consumer recency, shown as an inset panel over the map's empty corner. */
   recency?: RecencyBand[];
 }
@@ -86,7 +97,13 @@ function rampStep(i: number, count: number): number {
   return ramp[Math.min(i, ramp.length - 1)];
 }
 
-export function StatesCard({ data, customersWithoutState, recency }: Props) {
+export function StatesCard({
+  data,
+  customersWithoutState,
+  recency,
+  gmvWindowLabel,
+  gmvUnavailable,
+}: Props) {
   const [view, setView] = useState<View>("map");
   const [hover, setHover] = useState<{
     x: number;
@@ -108,7 +125,12 @@ export function StatesCard({ data, customersWithoutState, recency }: Props) {
     return rampStep(i < 0 ? bins.length - 1 : i, bins.length);
   };
 
-  const showTip = (e: React.MouseEvent, state: StateCount) => {
+  /**
+   * Pointer events, not mouse events: a phone has no hover, so a mouse-only
+   * tooltip is simply unreachable on touch. onPointerDown covers tapping and
+   * onPointerMove covers the mouse, from one handler.
+   */
+  const showTip = (e: React.PointerEvent | React.MouseEvent, state: StateCount) => {
     const rect = wrapRef.current?.getBoundingClientRect();
     if (!rect) return;
     setHover({
@@ -117,6 +139,17 @@ export function StatesCard({ data, customersWithoutState, recency }: Props) {
       state,
     });
   };
+
+  // A tap opens a tooltip with nothing to move away from, so dismiss on the
+  // next tap anywhere outside the card.
+  useEffect(() => {
+    if (!hover) return;
+    const away = (e: PointerEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setHover(null);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [hover]);
 
   return (
     <section className="card p-6" ref={wrapRef} style={{ position: "relative" }}>
@@ -195,6 +228,15 @@ export function StatesCard({ data, customersWithoutState, recency }: Props) {
             }
             dim={hover.state.consumers === null}
           />
+          <TipRow
+            label={gmvWindowLabel ? `GMV · ${gmvWindowLabel}` : "GMV"}
+            value={
+              hover.state.gmvCents !== null
+                ? compactMoney(hover.state.gmvCents)
+                : (gmvUnavailable ?? "not tracked by state")
+            }
+            dim={hover.state.gmvCents === null}
+          />
         </div>
       ) : null}
     </section>
@@ -236,7 +278,7 @@ function Choropleth({
 }: {
   byCode: Map<string, StateCount>;
   bin: (n: number) => number;
-  onHover: (e: React.MouseEvent, s: StateCount) => void;
+  onHover: (e: React.PointerEvent | React.MouseEvent, s: StateCount) => void;
   onLeave: () => void;
 }) {
   return (
@@ -244,7 +286,8 @@ function Choropleth({
       <svg
         viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
         width="100%"
-        style={{ maxWidth: MAP_WIDTH, minWidth: 620 }}
+        className="chart-map"
+        style={{ maxWidth: MAP_WIDTH }}
         role="img"
         aria-label="Map of the United States, states shaded by customer count"
       >
@@ -261,7 +304,8 @@ function Choropleth({
               stroke="var(--surface-1)"
               strokeWidth={1}
               strokeLinejoin="round"
-              onMouseMove={(e) => (stat ? onHover(e, stat) : undefined)}
+              onPointerMove={(e) => (stat ? onHover(e, stat) : undefined)}
+              onPointerDown={(e) => (stat ? onHover(e, stat) : undefined)}
               onMouseLeave={onLeave}
               // aria-label, not <title>: a <title> child makes the browser draw
               // its OWN tooltip on top of ours, so you get two overlapping
@@ -400,30 +444,40 @@ function Bars({
   onLeave,
 }: {
   data: StateCount[];
-  onHover: (e: React.MouseEvent, s: StateCount) => void;
+  onHover: (e: React.PointerEvent | React.MouseEvent, s: StateCount) => void;
   onLeave: () => void;
 }) {
-  const top = data.slice(0, 12);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const measured = useElementWidth(boxRef, 900);
+  // Fixed viewBox sized to the column rather than to the bars, so the chart
+  // fills the width the card gives it instead of stranding whitespace on the
+  // right. The row cap is generous enough that a normal network shows in full;
+  // the footnote only appears if it actually bites.
+  const MAX_ROWS = 20;
+  const top = data.slice(0, MAX_ROWS);
   const max = Math.max(1, ...top.map((d) => d.customers));
   const ticks = axisTicks(max, 4);
   const scaleMax = ticks[ticks.length - 1] || max;
 
-  const rowH = 26;
-  const barH = 14;
-  const labelW = 116;
-  const valueW = 44;
-  const plotW = 420;
-  const w = labelW + plotW + valueW;
-  const h = top.length * rowH + 22;
+  // Drawn at 1 unit = 1 pixel so the state names stay readable on a phone.
+  const VB_W = Math.max(measured, 320);
+  const rowH = 28;
+  const barH = 15;
+  // The name column has to give ground on a narrow screen or there's no plot
+  // left to draw into.
+  const labelW = VB_W < 520 ? 96 : 150;
+  const valueW = VB_W < 520 ? 40 : 54;
+  const plotW = VB_W - labelW - valueW;
+  const h = top.length * rowH + 24;
 
   return (
-    <div className="mt-3 overflow-x-auto">
+    <div className="mt-3 overflow-x-auto" ref={boxRef}>
       <svg
-        viewBox={`0 0 ${w} ${h}`}
+        viewBox={`0 0 ${VB_W} ${h}`}
         width="100%"
-        style={{ maxWidth: w, minWidth: 520 }}
+        className="chart-bars"
         role="img"
-        aria-label="Top states by customer count"
+        aria-label="States ranked by customer count"
       >
         {ticks.map((t) => (
           <line
@@ -442,21 +496,22 @@ function Bars({
           return (
             <g
               key={d.code}
-              onMouseMove={(e) => onHover(e, d)}
+              onPointerMove={(e) => onHover(e, d)}
+              onPointerDown={(e) => onHover(e, d)}
               onMouseLeave={onLeave}
             >
               <rect
                 x={0}
                 y={i * rowH}
-                width={w}
+                width={VB_W}
                 height={rowH}
                 fill="transparent"
               />
               <text
-                x={labelW - 8}
+                x={labelW - 10}
                 y={i * rowH + rowH / 2 + 4}
                 textAnchor="end"
-                fontSize={12}
+                fontSize={12.5}
                 fill="var(--text-secondary)"
               >
                 {d.name}
@@ -466,9 +521,9 @@ function Bars({
                 fill="var(--series-1)"
               />
               <text
-                x={labelW + bw + 7}
+                x={labelW + bw + 8}
                 y={i * rowH + rowH / 2 + 4}
-                fontSize={12}
+                fontSize={12.5}
                 fontWeight={600}
                 fill="var(--text-primary)"
                 style={{ fontVariantNumeric: "tabular-nums" }}
@@ -491,7 +546,7 @@ function Bars({
             key={t}
             className="axis-text"
             x={labelW + (t / scaleMax) * plotW}
-            y={top.length * rowH + 14}
+            y={top.length * rowH + 16}
             textAnchor="middle"
           >
             {t}

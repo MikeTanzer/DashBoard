@@ -94,7 +94,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
         {snapshot.demo ? <DemoBanner /> : null}
 
         {/* One control row, scoping everything below --------------------- */}
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="controls mb-6 flex flex-wrap items-center justify-between gap-3">
           <FilterBar
             platforms={snapshot.platforms}
             selected={selected}
@@ -244,6 +244,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               recency={
                 m.consumerRecency.available ? m.consumerRecency.value : undefined
               }
+              gmvWindowLabel={range.window}
+              gmvUnavailable={m.stateGmvUnavailable}
             />
           ) : (
             <EmptyCard

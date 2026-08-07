@@ -185,6 +185,43 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* iOS enlarges text on rotation without this, which breaks every layout
+     assumption below. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Nothing may scroll the page sideways; wide content scrolls inside its own
+   container instead. Worth asserting globally — a single overflowing chart
+   otherwise makes the entire dashboard slide on a phone. */
+html,
+body {
+  overflow-x: hidden;
+}
+
+/* Momentum scrolling for the chart/table scrollers on iOS. */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/**
+ * Touch devices get larger hit targets. 30px controls are fine with a mouse
+ * and miss constantly with a thumb; iOS guidance is 44px, Android 48dp.
+ */
+@media (pointer: coarse) {
+  .seg button,
+  .seg-solo,
+  .ghost-btn,
+  .chip,
+  .btn-primary,
+  .btn-quiet {
+    min-height: 40px;
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+  .chip {
+    min-height: 42px;
+  }
 }
 
 /* --- Layout ---------------------------------------------------------------- */
@@ -192,7 +229,9 @@ body {
 .shell {
   max-width: 1200px;
   margin: 0 auto;
-  padding-inline: 20px;
+  /* Respect the notch / rounded corners in landscape on iOS. */
+  padding-inline: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
 }
 @media (min-width: 640px) {
   .shell {
@@ -205,6 +244,7 @@ body {
 .topbar {
   background: linear-gradient(135deg, var(--navy) 0%, var(--navy-lift) 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: env(safe-area-inset-top);
 }
 
 .topbar .muted {
@@ -224,6 +264,50 @@ body {
 .ghost-btn:hover {
   background: rgba(255, 255, 255, 0.14);
   border-color: rgba(255, 255, 255, 0.34);
+}
+
+/**
+ * Controls on a phone.
+ *
+ * The row carries 3 platform chips, 6 window buttons, 4 bucket buttons and a
+ * date picker — roughly 900px of controls against a 375px screen. Rather than
+ * hide or collapse any of it behind a menu, each group becomes its own
+ * full-width, horizontally scrollable strip: everything stays reachable and
+ * nothing overflows the page.
+ */
+@media (max-width: 900px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .controls > * {
+    width: 100%;
+  }
+  .control-scroll {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .control-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  .control-scroll > .seg,
+  .control-scroll > .seg-solo {
+    flex-shrink: 0;
+  }
+  /* Segments stop stretching so they can scroll rather than squash. */
+  .states-side .seg {
+    width: 100%;
+  }
+}
+
+/* The hero figure has to survive a 320px screen without wrapping mid-number. */
+.hero-figure {
+  font-size: clamp(2rem, 11vw, 3.25rem);
 }
 
 /* --- Cards ----------------------------------------------------------------- */
@@ -420,6 +504,8 @@ h3 {
   top: calc(100% + 8px);
   z-index: 40;
   width: 310px;
+  /* Never wider than the screen on a phone, and never off the left edge. */
+  max-width: calc(100vw - 32px);
   background: var(--surface-1);
   border: 1px solid var(--border-strong);
   border-radius: 14px;
@@ -433,10 +519,16 @@ h3 {
   border-radius: 9px;
   background: var(--surface-2);
   color: var(--text-primary);
-  padding: 7px 10px;
-  font-size: 13px;
+  padding: 8px 10px;
+  /* 16px exactly: iOS Safari zooms the whole page when a focused input is
+     under 16px, and never zooms back out. */
+  font-size: 16px;
   font-family: inherit;
   font-variant-numeric: tabular-nums;
+  /* iOS renders date inputs at its own height and ignores the box otherwise. */
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 42px;
 }
 .date-pop input[type="date"]:focus {
   outline: 2px solid var(--coral);
@@ -474,6 +566,36 @@ a:focus-visible {
   outline: 2px solid var(--coral);
   outline-offset: 2px;
   border-radius: 8px;
+}
+
+/**
+ * Chart minimum widths live here rather than inline, so a phone can relax them.
+ * A stacked column chart reads fine at 320px; the US map genuinely cannot, so
+ * that one keeps a floor and scrolls inside its own container.
+ */
+.chart-revenue {
+  min-width: 560px;
+}
+.chart-bars {
+  min-width: 520px;
+}
+.chart-map {
+  min-width: 620px;
+}
+
+@media (max-width: 640px) {
+  /* These two redraw at the container's width, so they need no floor. */
+  .chart-revenue,
+  .chart-bars {
+    min-width: 0;
+  }
+  /* The map can't reflow — the projection is fixed geometry — so it keeps a
+     floor and scrolls sideways inside its own container. 520px squeezed the
+     state labels to 8.5px; 700 keeps them near 11px, which is legible, and
+     scrolling a map is a normal thing to do on a phone. */
+  .chart-map {
+    min-width: 700px;
+  }
 }
 
 /* --- Chart chrome ---------------------------------------------------------- */

@@ -320,11 +320,33 @@ for (const platform of ["webjoint", "menu"]) {
     // A little drift month to month, fixed once per month.
     const rate = TAKE_RATE[platform] * (0.94 + rand() * 0.12);
     rateFor.set(r.month, rate);
-    gmv.push({
-      month: r.month,
-      platform,
-      amountCents: Math.round((r.saasCents + r.usageCents) / rate),
+    const amountCents = Math.round((r.saasCents + r.usageCents) / rate);
+
+    // Split across the states this platform sells in, weighted the same way
+    // its customers are — GMV follows the storefronts. The largest state takes
+    // the rounding remainder so the parts sum exactly to the month.
+    const weights = new Map();
+    for (const code of platform === "webjoint" ? WEBJOINT_STATES : MENU_STATES) {
+      weights.set(code, (weights.get(code) ?? 0) + 1);
+    }
+    const totalWeight = [...weights.values()].reduce((a, b) => a + b, 0);
+    const entries = [...weights.entries()].sort((a, b) => b[1] - a[1]);
+
+    const byState = {};
+    let left = amountCents;
+    entries.forEach(([code, w], i) => {
+      const share =
+        i === entries.length - 1 ? left : Math.round(amountCents * (w / totalWeight));
+      byState[code] = share;
+      left -= share;
     });
+
+    const sum = Object.values(byState).reduce((a, b) => a + b, 0);
+    if (sum !== amountCents) {
+      throw new Error(`${platform} ${r.month}: GMV byState sums to ${sum}, expected ${amountCents}`);
+    }
+
+    gmv.push({ month: r.month, platform, amountCents, byState });
   }
   // Per-day rounding drifts a few cents off the month, so the last covered
   // day of each month absorbs the remainder — the daily and monthly views have

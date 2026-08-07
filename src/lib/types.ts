@@ -133,6 +133,14 @@ export interface GmvPoint {
   month: string;
   platform: PlatformId;
   amountCents: number;
+  /**
+   * Optional split of this month's GMV by USPS state code.
+   *
+   * Monthly only — a per-day-per-state breakdown would multiply out to
+   * thousands of rows for no visible gain, so day-grained windows report
+   * per-state GMV as unavailable rather than approximating it.
+   */
+  byState?: Record<string, number>;
 }
 
 export interface GmvDayPoint {

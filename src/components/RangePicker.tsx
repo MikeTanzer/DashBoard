@@ -117,7 +117,7 @@ export function RangePicker({
 
   return (
     <div
-      className="flex items-center gap-2"
+      className="control-scroll flex items-center gap-2"
       style={{ opacity: pending ? 0.6 : 1, transition: "opacity 120ms" }}
     >
       <div className="seg" role="group" aria-label="Time range">

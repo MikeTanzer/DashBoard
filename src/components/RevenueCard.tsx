@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Bar } from "@/lib/metrics";
 import type { Grain, RangeSpec } from "@/lib/range";
 import { axisTicks, compactMoney, money, percent } from "@/lib/format";
 import { NotTracked } from "./StatTile";
+import { useElementWidth } from "@/lib/useElementWidth";
 
 type View = "chart" | "table";
 
@@ -51,8 +52,10 @@ export function RevenueCard({
     index: number;
   } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const plotRef = useRef<HTMLDivElement>(null);
 
   const dayGrain = bucket === "day";
+  const measuredWidth = useElementWidth(plotRef, 1100);
   const unit = { day: "day", month: "month", quarter: "quarter", year: "year" }[
     bucket
   ];
@@ -67,7 +70,10 @@ export function RevenueCard({
   const TOP_PAD = 20;
   const LEFT = 64;
   const RIGHT = 12;
-  const VB_W = 1100;
+  // 1 viewBox unit = 1 rendered pixel, so axis and value labels keep their
+  // intended size on a phone instead of being scaled into illegibility.
+  // Floored so a very narrow card still gets a usable plot and scrolls.
+  const VB_W = Math.max(measuredWidth, 320);
   const SLOT_MAX = 104;
 
   const n = Math.max(1, bars.length);
@@ -82,10 +88,24 @@ export function RevenueCard({
   const scaleMax = ticks[ticks.length - 1] || max;
   const yOf = (cents: number) => PLOT_H - (cents / scaleMax) * PLOT_H;
 
+  useEffect(() => {
+    if (!hover) return;
+    const away = (e: PointerEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setHover(null);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [hover]);
+
   const hasPartial = bars.some((b) => b.partial);
   const lastComplete = [...bars].reverse().find((b) => !b.partial)?.key;
 
-  const showTip = (e: React.MouseEvent, point: Bar, index: number) => {
+  // Pointer events so the tooltip is reachable by tap; see StatesCard.
+  const showTip = (
+    e: React.PointerEvent | React.MouseEvent,
+    point: Bar,
+    index: number,
+  ) => {
     const rect = wrapRef.current?.getBoundingClientRect();
     if (!rect) return;
     setHover({ x: e.clientX - rect.left, y: e.clientY - rect.top, point, index });
@@ -120,7 +140,7 @@ export function RevenueCard({
               ? `Revenue · ${scopeLabel}`
               : `Revenue collected · ${range.window} · ${scopeLabel}`}
           </div>
-          <div className="display text-[52px] mt-2.5">
+          <div className="display hero-figure mt-2.5">
             {unavailableReason ? "—" : money(windowTotalCents)}
           </div>
           <div
@@ -166,11 +186,11 @@ export function RevenueCard({
             <NotTracked needs={unavailableReason} />
           </div>
         ) : view === "chart" ? (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" ref={plotRef}>
             <svg
               viewBox={`0 0 ${VB_W} ${h}`}
               width="100%"
-              style={{ minWidth: 560 }}
+              className="chart-revenue"
               role="img"
               aria-label="Stacked columns of revenue split into SaaS and usage"
             >
@@ -208,7 +228,8 @@ export function RevenueCard({
                     <g
                       key={b.key}
                       opacity={b.partial ? 0.5 : 1}
-                      onMouseMove={(e) => showTip(e, b, i)}
+                      onPointerMove={(e) => showTip(e, b, i)}
+                      onPointerDown={(e) => showTip(e, b, i)}
                       onMouseLeave={() => setHover(null)}
                     >
                       <rect
