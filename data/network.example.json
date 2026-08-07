@@ -57,6 +57,22 @@
     }
   ],
 
+  "_gmv_comment": [
+    "Gross merchandise value — what shoppers spent on our customers'",
+    "storefronts. This is NOT our revenue; we take a fee on it, so GMV runs an",
+    "order of magnitude larger. It cannot be derived from our revenue without",
+    "assuming a take rate, so it has to come from whatever processed the orders.",
+    "`gmv` is monthly; `gmvDaily` is optional and only needed if you want the",
+    "1W / 1M ranges to show GMV — without it those ranges report it untracked",
+    "rather than resampling months."
+  ],
+  "gmv": [
+    { "month": "2026-07", "platform": "webjoint", "amountCents": 0 }
+  ],
+  "gmvDaily": [
+    { "date": "2026-07-31", "platform": "webjoint", "amountCents": 0 }
+  ],
+
   "_cash_comment": [
     "Cash on hand. A bank balance — it is NOT derived from revenue or MRR, and",
     "it does not move with the dashboard's time range. List one entry per",

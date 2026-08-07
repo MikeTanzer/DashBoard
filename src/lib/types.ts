@@ -118,6 +118,31 @@ export interface RevenueDayPoint {
 }
 
 /**
+ * Gross merchandise value: what shoppers spent on our customers' storefronts.
+ *
+ * NOT our revenue — we take a fee on this, so GMV is far larger than anything
+ * else on the dashboard and the two must never be conflated. It also can't be
+ * derived from our revenue without assuming a take rate, so it comes from the
+ * platform that processed the orders.
+ *
+ * Same monthly/daily pair as revenue, so it slices to the selected range with
+ * the identical rules.
+ */
+export interface GmvPoint {
+  /** "YYYY-MM" */
+  month: string;
+  platform: PlatformId;
+  amountCents: number;
+}
+
+export interface GmvDayPoint {
+  /** "YYYY-MM-DD" */
+  date: string;
+  platform: PlatformId;
+  amountCents: number;
+}
+
+/**
  * A cash balance in one account, at a point in time.
  *
  * Cash on hand is a balance, not a flow — it can't be derived from revenue,
@@ -151,13 +176,20 @@ export interface SourceStatus {
 }
 
 /** The four independent things a connector can supply. */
-export type DataDomain = "customers" | "consumers" | "revenue" | "cash";
+export type DataDomain =
+  | "customers"
+  | "consumers"
+  | "revenue"
+  | "cash"
+  | "gmv";
 
 export interface ConnectorResult {
   customers?: CustomerRecord[];
   consumers?: ConsumerStats[];
   revenue?: RevenuePoint[];
   revenueDaily?: RevenueDayPoint[];
+  gmv?: GmvPoint[];
+  gmvDaily?: GmvDayPoint[];
   cash?: CashPosition[];
   platforms?: Platform[];
   status: SourceStatus;
@@ -172,6 +204,8 @@ export interface Snapshot {
   consumers: ConsumerStats[];
   revenue: RevenuePoint[];
   revenueDaily: RevenueDayPoint[];
+  gmv: GmvPoint[];
+  gmvDaily: GmvDayPoint[];
   cash: CashPosition[];
   sources: SourceStatus[];
 }

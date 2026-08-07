@@ -47,6 +47,15 @@ those ranges say what's needed instead of guessing. Stripe supplies them
 automatically (invoices carry timestamps); the admin API can send a
 `revenueDaily` array; a hand-maintained file usually can't and doesn't have to.
 
+**GMV**
+- Gross merchandise value over the selected window, and our take rate on it
+
+Shopper spend on our customers' storefronts — an order of magnitude above our
+own revenue, and deliberately labelled with the window so the two are never
+confused. It can't be derived from our revenue without assuming a take rate, so
+it comes from the platform that processed the orders: `PYROTREE_SQL_GMV` on the
+database connector, or `gmv` / `gmvDaily` from the admin API or manual file.
+
 **Cash**
 - Cash on hand, summed across reported accounts, with an as-of date
 

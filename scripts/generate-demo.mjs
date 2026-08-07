@@ -304,6 +304,64 @@ function makeConsumerRollup(platform, tracked, rate30, stateWeights) {
   return { platform, tracked, purchasers, consumersByState };
 }
 
+// -- GMV ----------------------------------------------------------------------
+// What shoppers spent on our customers' storefronts. Derived from OUR revenue
+// via a per-month take rate, which keeps the two internally consistent: the
+// take-rate figure the dashboard shows lands back in a believable band, and
+// daily GMV sums to monthly GMV exactly because the rate is constant within a
+// month (daily revenue already sums to monthly revenue).
+const TAKE_RATE = { webjoint: 0.026, menu: 0.031 };
+const gmv = [];
+const gmvDaily = [];
+
+for (const platform of ["webjoint", "menu"]) {
+  const rateFor = new Map();
+  for (const r of revenue.filter((r) => r.platform === platform)) {
+    // A little drift month to month, fixed once per month.
+    const rate = TAKE_RATE[platform] * (0.94 + rand() * 0.12);
+    rateFor.set(r.month, rate);
+    gmv.push({
+      month: r.month,
+      platform,
+      amountCents: Math.round((r.saasCents + r.usageCents) / rate),
+    });
+  }
+  // Per-day rounding drifts a few cents off the month, so the last covered
+  // day of each month absorbs the remainder — the daily and monthly views have
+  // to agree exactly, same rule the revenue series follows.
+  const daysByMonth = new Map();
+  for (const d of revenueDaily.filter((d) => d.platform === platform)) {
+    const m = d.date.slice(0, 7);
+    if (!rateFor.has(m)) continue;
+    if (!daysByMonth.has(m)) daysByMonth.set(m, []);
+    daysByMonth.get(m).push(d);
+  }
+
+  for (const [m, days] of daysByMonth) {
+    const rate = rateFor.get(m);
+    const monthTotal = gmv.find(
+      (g) => g.platform === platform && g.month === m,
+    ).amountCents;
+    // A month only partly inside the daily window can't claim the whole total.
+    const covered = days.reduce((a, d) => a + d.saasCents + d.usageCents, 0);
+    const revMonth = revenue.find(
+      (r) => r.platform === platform && r.month === m,
+    );
+    const wholeMonth = covered === revMonth.saasCents + revMonth.usageCents;
+
+    let left = monthTotal;
+    days.forEach((d, i) => {
+      const last = i === days.length - 1;
+      const amount =
+        wholeMonth && last
+          ? left
+          : Math.round((d.saasCents + d.usageCents) / rate);
+      left -= amount;
+      gmvDaily.push({ date: d.date, platform, amountCents: amount });
+    });
+  }
+}
+
 const payload = {
   demo: true,
   _comment:
@@ -319,6 +377,8 @@ const payload = {
   ],
   revenue,
   revenueDaily,
+  gmv,
+  gmvDaily,
   // Cash is a balance reported by a bank or Stripe, never derived from the
   // revenue above — these are two independent figures and are meant to be.
   cash: [

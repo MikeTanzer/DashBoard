@@ -129,6 +129,11 @@ export interface DashboardMetrics {
   /** Exclusive recency slices of the consumer base. */
   consumerRecency: Metric<RecencyBand[]>;
 
+  /** GMV over the selected window — shopper spend, not our revenue. */
+  gmvWindow: Metric<number>;
+  /** Our revenue as a share of that GMV, when both are known. */
+  takeRate: Metric<number>;
+
   /** Total cash across reported accounts. A balance — the range doesn't move it. */
   cashOnHand: Metric<number>;
   /** How many months of current burn that covers, when burn is knowable. */
@@ -147,6 +152,8 @@ const NEEDS_STATE =
   "Customer records exist, but none carry a state. Add an address state in Stripe, or a `state` field on each customer.";
 const NEEDS_CONSUMERS =
   "Connect the platform database (consumer rollup query) or have the internal admin API return a `consumers` array.";
+const NEEDS_GMV =
+  "GMV is what shoppers spent on our customers' storefronts — we only take a fee on it, so it can't be derived from our own revenue. It comes from the platform that processed the orders: add a GMV query to the platform database, or send `gmv` / `gmvDaily` from the admin API.";
 const NEEDS_CASH =
   "Cash on hand is a bank balance, not something derivable from revenue or MRR. Supply it via `cash` in data/network.json or from the admin API, or set STRIPE_SECRET_KEY to pull the Stripe balance (Stripe covers money held there, not your operating account).";
 const NEEDS_DAILY_REVENUE =
@@ -472,6 +479,50 @@ export function computeMetrics(
     return bands.length ? available(bands) : unavailable(NEEDS_CONSUMERS);
   })();
 
+  // --- GMV ------------------------------------------------------------------
+  // Windowed with the SAME rules as revenue — same grain, same bounds, same
+  // slice — so the two figures always describe the identical period.
+  const gmvMonths = new Map<string, number>();
+  for (const g of snapshot.gmv.filter((g) => inScope(g.platform))) {
+    gmvMonths.set(g.month, (gmvMonths.get(g.month) ?? 0) + g.amountCents);
+  }
+  const gmvDays = new Map<string, number>();
+  for (const g of snapshot.gmvDaily.filter((g) => inScope(g.platform))) {
+    gmvDays.set(g.date, (gmvDays.get(g.date) ?? 0) + g.amountCents);
+  }
+
+  const gmvWindowTotal = (() => {
+    // Match the keys the revenue window is already built from, so a quarter or
+    // year rolls up identically instead of being re-derived.
+    if (dayGrain) {
+      if (gmvDays.size === 0) return null;
+      return windowRows.reduce((a, r) => {
+        const key = "date" in r ? r.date : r.month;
+        return a + (gmvDays.get(key) ?? 0);
+      }, 0);
+    }
+    if (gmvMonths.size === 0) return null;
+    // windowRows may be quarters/years; expand each back to its months.
+    const inBucket = (monthKey: string) =>
+      windowRows.some((r) => {
+        const k = "date" in r ? r.date : r.month;
+        if (k.includes("-Q")) {
+          const [y, q] = k.split("-Q");
+          const m = Number(monthKey.split("-")[1]);
+          return (
+            monthKey.startsWith(y) && Math.floor((m - 1) / 3) + 1 === Number(q)
+          );
+        }
+        if (k.length === 4) return monthKey.startsWith(k);
+        return k === monthKey;
+      });
+    let total = 0;
+    for (const [monthKey, amount] of gmvMonths) {
+      if (inBucket(monthKey)) total += amount;
+    }
+    return total;
+  })();
+
   // --- Cash ------------------------------------------------------------------
   // Deliberately NOT filtered by platform or range: a bank balance belongs to
   // the company, not to a product line or a date window.
@@ -484,6 +535,18 @@ export function computeMetrics(
   const cashAsOf = cashDates.length ? cashDates[0] : null;
 
   return {
+    gmvWindow:
+      gmvWindowTotal === null
+        ? unavailable(dailyMissing ? NEEDS_DAILY_REVENUE : NEEDS_GMV)
+        : available(gmvWindowTotal),
+
+    // Our cut of the volume. Only meaningful when both sides cover the same
+    // window, which they do by construction above.
+    takeRate:
+      gmvWindowTotal !== null && gmvWindowTotal > 0 && !dailyMissing
+        ? available(windowSum / gmvWindowTotal)
+        : unavailable(NEEDS_GMV),
+
     cashOnHand: snapshot.cash.length
       ? available(
           cashTotal,

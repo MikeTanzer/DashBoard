@@ -5,6 +5,7 @@ import { computeMetrics, platformBreakdown } from "@/lib/metrics";
 import { readRange, resolveView, windowPhrase } from "@/lib/range";
 import type { Snapshot } from "@/lib/types";
 import {
+  compactMoney,
   compactNumber,
   fullNumber,
   money,
@@ -191,10 +192,10 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           />
         </div>
 
-        {/* Row 2 — unit economics. Two half-width tiles keep the same gutters
-            as the 4-up row above, so the grid rhythm holds. ---------------- */}
+        {/* Row 2 — economics. Four equal tiles, matching the row above. --- */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
           <RevenuePerCustomer m={m} />
+
           {/* A balance, not a flow: it doesn't move with the time range, so no
               window is named here. The as-of date is the honest caveat — a
               stale balance looks identical to a current one. */}
@@ -209,7 +210,27 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
                   : "As-of date not reported"
                 : undefined
             }
-            span={2}
+          />
+
+          {/* Shopper spend on our customers' storefronts — an order of
+              magnitude above our own revenue, so the label and the take-rate
+              hint both work to keep the two from being read as the same thing. */}
+          <StatTile
+            label={`GMV · ${range.window}`}
+            metric={m.gmvWindow}
+            format={(v) => compactMoney(v)}
+            hint={
+              m.takeRate.available
+                ? `We keep ${percent(m.takeRate.value, 2)} of it`
+                : undefined
+            }
+          />
+
+          <StatTile
+            label="Revenue change"
+            metric={m.revenueChange}
+            format={(v) => `${v >= 0 ? "+" : ""}${percent(v, 1)}`}
+            hint={`Complete periods only · vs the ${range.window.replace("last ", "")} before`}
           />
         </div>
 

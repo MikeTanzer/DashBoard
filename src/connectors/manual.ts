@@ -8,6 +8,8 @@ import type {
   DataDomain,
   Platform,
   CashPosition,
+  GmvDayPoint,
+  GmvPoint,
   RevenueDayPoint,
   RevenuePoint,
 } from "@/lib/types";
@@ -33,6 +35,8 @@ interface ManualFile {
   revenue?: RevenuePoint[];
   revenueDaily?: RevenueDayPoint[];
   cash?: CashPosition[];
+  gmv?: GmvPoint[];
+  gmvDaily?: GmvDayPoint[];
 }
 
 function filePath(): string {
@@ -102,6 +106,14 @@ export const manualConnector: Connector = {
     );
     if (cash.length) provides.push("cash");
 
+    const gmv = (parsed.gmv ?? []).filter(
+      (g) => g && g.month && typeof g.amountCents === "number",
+    );
+    const gmvDaily = (parsed.gmvDaily ?? []).filter(
+      (g) => g && g.date && typeof g.amountCents === "number",
+    );
+    if (gmv.length || gmvDaily.length) provides.push("gmv");
+
     const summary = [
       customers.length && `${customers.length} customers`,
       consumers.length && `${consumers.length} platform consumer rollups`,
@@ -117,6 +129,8 @@ export const manualConnector: Connector = {
       revenue,
       revenueDaily,
       cash,
+      gmv,
+      gmvDaily,
       platforms: parsed.platforms,
       status: {
         id: "manual",

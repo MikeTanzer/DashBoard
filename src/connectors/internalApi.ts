@@ -6,6 +6,8 @@ import type {
   DataDomain,
   Platform,
   CashPosition,
+  GmvDayPoint,
+  GmvPoint,
   RevenueDayPoint,
   RevenuePoint,
 } from "@/lib/types";
@@ -70,6 +72,8 @@ interface ApiPayload {
   revenue?: Partial<RevenuePoint>[];
   revenueDaily?: Partial<RevenueDayPoint>[];
   cash?: CashPosition[];
+  gmv?: GmvPoint[];
+  gmvDaily?: GmvDayPoint[];
 }
 
 export const internalApiConnector: Connector = {
@@ -154,6 +158,14 @@ export const internalApiConnector: Connector = {
     );
     if (cash.length) provides.push("cash");
 
+    const gmv = (payload.gmv ?? []).filter(
+      (g) => g && g.month && typeof g.amountCents === "number",
+    );
+    const gmvDaily = (payload.gmvDaily ?? []).filter(
+      (g) => g && g.date && typeof g.amountCents === "number",
+    );
+    if (gmv.length || gmvDaily.length) provides.push("gmv");
+
     const summary = [
       customers.length && `${customers.length} customers`,
       consumers.length && `${consumers.length} platform consumer rollups`,
@@ -169,6 +181,8 @@ export const internalApiConnector: Connector = {
       revenue,
       revenueDaily,
       cash,
+      gmv,
+      gmvDaily,
       platforms: payload.platforms,
       status: {
         id: "internal-api",

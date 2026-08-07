@@ -18,7 +18,7 @@ import { NotTracked } from "./StatTile";
 export function RevenuePerCustomer({ m }: { m: DashboardMetrics }) {
   if (!m.avgGrossPerCustomer.available) {
     return (
-      <div className="card p-5 flex flex-col gap-2 lg:col-span-2">
+      <div className="card p-5 flex flex-col gap-2">
         <div className="eyebrow">Avg revenue per customer</div>
         <NotTracked needs={m.avgGrossPerCustomer.needs} />
       </div>
@@ -32,7 +32,7 @@ export function RevenuePerCustomer({ m }: { m: DashboardMetrics }) {
     : null;
 
   return (
-    <div className="card p-5 flex flex-col gap-2 lg:col-span-2">
+    <div className="card p-5 flex flex-col gap-2">
       <div className="eyebrow">Avg revenue per customer</div>
       <div className="display text-[30px]">{money(gross)}/mo</div>
 

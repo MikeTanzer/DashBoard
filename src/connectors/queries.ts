@@ -55,6 +55,24 @@ export const CONSUMERS_SQL =
 export const CUSTOMERS_SQL = process.env.PYROTREE_SQL_CUSTOMERS ?? null;
 
 /**
+ * Optional. Gross merchandise value — what shoppers spent on our customers'
+ * storefronts, which only the platform that processed the orders can know.
+ *
+ * Must return these exact column names:
+ *   platform (text) · month ("YYYY-MM") · amount_cents (bigint)
+ *
+ * Add a second query keyed by `day` ("YYYY-MM-DD") via PYROTREE_SQL_GMV_DAILY
+ * if you want the 1W / 1M ranges to show GMV too; without it those ranges
+ * report GMV as untracked rather than resampling months.
+ *
+ * Leave PYROTREE_SQL_GMV unset and GMV is skipped entirely.
+ */
+export const GMV_SQL = process.env.PYROTREE_SQL_GMV ?? null;
+
+/** Same, per day. Must return: platform · day ("YYYY-MM-DD") · amount_cents. */
+export const GMV_DAILY_SQL = process.env.PYROTREE_SQL_GMV_DAILY ?? null;
+
+/**
  * MongoDB equivalent of CONSUMERS_SQL, as an aggregation pipeline. Only used
  * when PYROTREE_DB_ENGINE=mongodb. Must project the same four field names.
  */

@@ -6,6 +6,8 @@ import { databaseConnector } from "./database";
 import { internalApiConnector } from "./internalApi";
 import type {
   CashPosition,
+  GmvDayPoint,
+  GmvPoint,
   ConsumerStats,
   CustomerRecord,
   Platform,
@@ -53,6 +55,8 @@ async function buildSnapshot(): Promise<Snapshot> {
   // Keyed by account label so a later source refreshes a balance rather than
   // double-counting the same account.
   const cash = new Map<string, CashPosition>();
+  const gmv = new Map<string, GmvPoint>();
+  const gmvDaily = new Map<string, GmvDayPoint>();
   const platforms = new Map<string, Platform>(
     DEFAULT_PLATFORMS.map((p) => [p.id, p]),
   );
@@ -66,6 +70,8 @@ async function buildSnapshot(): Promise<Snapshot> {
     for (const p of r.revenueDaily ?? [])
       revenueDaily.set(`${p.date}|${p.platform}`, p);
     for (const c of r.cash ?? []) cash.set(c.label, c);
+    for (const g of r.gmv ?? []) gmv.set(`${g.month}|${g.platform}`, g);
+    for (const g of r.gmvDaily ?? []) gmvDaily.set(`${g.date}|${g.platform}`, g);
   }
 
   // Any platform referenced by data but never declared still gets a name.
@@ -95,6 +101,8 @@ async function buildSnapshot(): Promise<Snapshot> {
       a.date.localeCompare(b.date),
     ),
     cash: [...cash.values()],
+    gmv: [...gmv.values()].sort((a, b) => a.month.localeCompare(b.month)),
+    gmvDaily: [...gmvDaily.values()].sort((a, b) => a.date.localeCompare(b.date)),
     sources: results.map((r) => r.status),
   };
 }

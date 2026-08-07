@@ -4,6 +4,8 @@ import type {
   ConsumerStats,
   CustomerRecord,
   DataDomain,
+  GmvDayPoint,
+  GmvPoint,
 } from "@/lib/types";
 import { normalizeState } from "@/lib/states";
 import {
@@ -11,6 +13,8 @@ import {
   CONSUMERS_MONGO_PIPELINE,
   CONSUMERS_SQL,
   CUSTOMERS_SQL,
+  GMV_DAILY_SQL,
+  GMV_SQL,
 } from "./queries";
 
 /**
@@ -230,9 +234,30 @@ export const databaseConnector: Connector = {
       if (customers.length) provides.push("customers");
     }
 
+    let gmv: GmvPoint[] | undefined;
+    let gmvDaily: GmvDayPoint[] | undefined;
+    if (GMV_SQL && e !== "mongodb") {
+      gmv = (await query(GMV_SQL)).map((r) => ({
+        month: str(r.month),
+        platform: str(r.platform) || "unassigned",
+        amountCents: num(r.amount_cents),
+      }));
+      if (gmv.length) provides.push("gmv");
+    }
+    if (GMV_DAILY_SQL && e !== "mongodb") {
+      gmvDaily = (await query(GMV_DAILY_SQL)).map((r) => ({
+        date: str(r.day),
+        platform: str(r.platform) || "unassigned",
+        amountCents: num(r.amount_cents),
+      }));
+      if (gmvDaily.length && !provides.includes("gmv")) provides.push("gmv");
+    }
+
     return {
       consumers,
       customers,
+      gmv,
+      gmvDaily,
       status: {
         id: "database",
         label: `Platform database (${e})`,
