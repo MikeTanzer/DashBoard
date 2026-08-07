@@ -125,7 +125,7 @@ export default async function DashboardPage({
           )}
         </div>
 
-        {/* Customer + revenue tiles --------------------------------------- */}
+        {/* Row 1 — reach: how much of the market we touch ------------------ */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
           <StatTile
             label="Current customers"
@@ -136,34 +136,6 @@ export default async function DashboardPage({
             label="States with customers"
             metric={m.stateCount}
             format={(v) => `${v} of 51`}
-          />
-          <StatTile
-            label="Avg gross per customer"
-            metric={m.avgGrossPerCustomer}
-            format={(v) => `${money(v)}/mo`}
-          />
-          <StatTile
-            label="Revenue change"
-            metric={
-              m.revenueMoMChange.available
-                ? { available: true, value: m.revenueMoMChange.value }
-                : m.revenueMoMChange
-            }
-            format={(v) => `${v >= 0 ? "+" : ""}${percent(v, 1)}`}
-            hint="Latest full month vs the one before"
-          />
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-          <StatTile
-            label="Avg SaaS per customer"
-            metric={m.avgSaasPerCustomer}
-            format={(v) => `${money(v)}/mo`}
-          />
-          <StatTile
-            label="Avg usage per customer"
-            metric={m.avgUsagePerCustomer}
-            format={(v) => `${money(v)}/mo`}
           />
           <StatTile
             label="Consumers tracked"
@@ -179,6 +151,35 @@ export default async function DashboardPage({
                 ? `${percent(m.consumerActivation30d.value, 1)} of tracked consumers`
                 : undefined
             }
+          />
+        </div>
+
+        {/* Row 2 — unit economics: what that reach is worth ---------------- */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+          <StatTile
+            label="Avg gross per customer"
+            metric={m.avgGrossPerCustomer}
+            format={(v) => `${money(v)}/mo`}
+          />
+          <StatTile
+            label="Avg SaaS per customer"
+            metric={m.avgSaasPerCustomer}
+            format={(v) => `${money(v)}/mo`}
+          />
+          <StatTile
+            label="Avg usage per customer"
+            metric={m.avgUsagePerCustomer}
+            format={(v) => `${money(v)}/mo`}
+          />
+          <StatTile
+            label="Revenue change"
+            metric={
+              m.revenueMoMChange.available
+                ? { available: true, value: m.revenueMoMChange.value }
+                : m.revenueMoMChange
+            }
+            format={(v) => `${v >= 0 ? "+" : ""}${percent(v, 1)}`}
+            hint="Latest full month vs the one before"
           />
         </div>
 
