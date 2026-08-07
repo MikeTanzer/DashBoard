@@ -152,6 +152,80 @@ for (const platform of ["webjoint", "menu"]) {
   }
 }
 
+// -- 120 days of daily revenue ------------------------------------------------
+// The short ranges (1W, 1M) read this series rather than resampling months.
+// Each day is that month's total spread across its days, with a weekday shape
+// (weekends lighter) and a little noise — so the daily and monthly views
+// reconcile instead of telling two different stories.
+const DAYS_OF_DAILY = 120;
+const revenueDaily = [];
+const TODAY = new Date(Date.UTC(2026, 7, 6));
+const CURRENT_MONTH = "2026-08";
+
+for (const platform of ["webjoint", "menu"]) {
+  const byMonth = new Map(
+    revenue
+      .filter((r) => r.platform === platform)
+      .map((r) => [r.month, r]),
+  );
+
+  // Group the window's days by month, with a raw weight each.
+  const perMonth = new Map();
+  for (let back = DAYS_OF_DAILY - 1; back >= 0; back--) {
+    const d = new Date(TODAY);
+    d.setUTCDate(d.getUTCDate() - back);
+    const month = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    if (!byMonth.has(month)) continue;
+
+    // Sat/Sun run lighter. These are raw weights, normalised below — scaling
+    // them by hand never sums to the month, because the weekday/weekend mix
+    // differs month to month.
+    const dow = d.getUTCDay();
+    const weight = (dow === 0 || dow === 6 ? 0.55 : 1.18) * (0.88 + rand() * 0.24);
+
+    if (!perMonth.has(month)) perMonth.set(month, []);
+    perMonth.get(month).push({ date: d.toISOString().slice(0, 10), weight });
+  }
+
+  // Allocate each month's total across its days by normalised weight, giving
+  // the remainder to the last day so the daily series sums EXACTLY to the
+  // monthly one — the two views have to agree.
+  for (const [month, entries] of perMonth) {
+    // The window starts mid-month, so its first month is only partly covered.
+    // Allocating a whole month's total across those few days would inflate them
+    // badly — drop it. The current month is legitimately partial in BOTH
+    // series, so it stays.
+    const coversFromDayOne = entries[0].date.endsWith("-01");
+    const isCurrentMonth = month === CURRENT_MONTH;
+    if (!coversFromDayOne && !isCurrentMonth) continue;
+
+    const row = byMonth.get(month);
+    const total = entries.reduce((a, e) => a + e.weight, 0);
+
+    // A partial month only has its elapsed days here, so its total is already
+    // pro-rata and the whole of it belongs to those days.
+    let saasLeft = row.saasCents;
+    let usageLeft = row.usageCents;
+
+    entries.forEach((e, i) => {
+      const last = i === entries.length - 1;
+      const share = e.weight / total;
+      const saas = last ? saasLeft : Math.round(row.saasCents * share);
+      const usage = last ? usageLeft : Math.round(row.usageCents * share);
+      saasLeft -= saas;
+      usageLeft -= usage;
+      revenueDaily.push({
+        date: e.date,
+        platform,
+        saasCents: saas,
+        usageCents: usage,
+      });
+    });
+  }
+}
+
+revenueDaily.sort((a, b) => a.date.localeCompare(b.date));
+
 const payload = {
   demo: true,
   _comment:
@@ -176,6 +250,7 @@ const payload = {
     },
   ],
   revenue,
+  revenueDaily,
 };
 
 const out = path.join(process.cwd(), "data", "network.json");
@@ -184,5 +259,5 @@ await writeFile(out, JSON.stringify(payload, null, 2) + "\n");
 
 const states = new Set(customers.map((c) => c.state));
 console.log(
-  `Wrote ${out}\n  ${customers.length} customers across ${states.size} states\n  ${revenue.length} revenue rows`,
+  `Wrote ${out}\n  ${customers.length} customers across ${states.size} states\n  ${revenue.length} monthly revenue rows\n  ${revenueDaily.length} daily revenue rows`,
 );

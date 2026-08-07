@@ -1,10 +1,11 @@
 import type { Connector } from "./types";
-import { monthKey, toMonthlyCents } from "./types";
+import { dayKey, monthKey, toMonthlyCents } from "./types";
 import type {
   ConnectorResult,
   CustomerRecord,
   DataDomain,
   PlatformId,
+  RevenueDayPoint,
   RevenuePoint,
 } from "@/lib/types";
 import { normalizeState } from "@/lib/states";
@@ -269,32 +270,53 @@ export const stripeConnector: Connector = {
     });
 
     const buckets = new Map<string, RevenuePoint>();
+    // Invoices carry an exact timestamp, so the daily series costs nothing
+    // extra here — and it's what the short time ranges read off.
+    const dayBuckets = new Map<string, RevenueDayPoint>();
     let truncatedLines = 0;
 
     for (const inv of invoices) {
       if (inv.lines.has_more) truncatedLines++;
-      const month = monthKey(new Date(inv.created * 1000));
+      const at = new Date(inv.created * 1000);
+      const month = monthKey(at);
+      const date = dayKey(at);
       const platform =
         (inv.customer && platformByCustomer.get(inv.customer)) ??
         process.env.STRIPE_DEFAULT_PLATFORM ??
         "unassigned";
-      const bucketKey = `${month}|${platform}`;
-      const bucket = buckets.get(bucketKey) ?? {
+
+      const bucket = buckets.get(`${month}|${platform}`) ?? {
         month,
         platform,
         saasCents: 0,
         usageCents: 0,
       };
+      const day = dayBuckets.get(`${date}|${platform}`) ?? {
+        date,
+        platform,
+        saasCents: 0,
+        usageCents: 0,
+      };
+
       for (const line of inv.lines.data) {
-        if (classify(line.price, usageProducts) === "usage")
+        if (classify(line.price, usageProducts) === "usage") {
           bucket.usageCents += line.amount;
-        else bucket.saasCents += line.amount;
+          day.usageCents += line.amount;
+        } else {
+          bucket.saasCents += line.amount;
+          day.saasCents += line.amount;
+        }
       }
-      buckets.set(bucketKey, bucket);
+
+      buckets.set(`${month}|${platform}`, bucket);
+      dayBuckets.set(`${date}|${platform}`, day);
     }
 
     const revenue = [...buckets.values()].sort((a, b) =>
       a.month.localeCompare(b.month),
+    );
+    const revenueDaily = [...dayBuckets.values()].sort((a, b) =>
+      a.date.localeCompare(b.date),
     );
     if (revenue.length) provides.push("revenue");
 
@@ -311,6 +333,7 @@ export const stripeConnector: Connector = {
     return {
       customers,
       revenue,
+      revenueDaily,
       status: {
         id: "stripe",
         label: "Stripe",

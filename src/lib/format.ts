@@ -44,6 +44,14 @@ export function monthLabel(month: string, withYear = false): string {
   return withYear ? `${name} '${y.slice(2)}` : name;
 }
 
+/** "2026-08-06" -> "6 Aug" (long: "6 Aug 2026"). Parsed as UTC parts, never
+ *  through `new Date(str)`, so it can't drift a day by local timezone. */
+export function dayLabel(date: string, long = false): string {
+  const [y, m, d] = date.split("-");
+  const name = MONTHS[Number(m) - 1] ?? m;
+  return long ? `${Number(d)} ${name} ${y}` : `${Number(d)} ${name}`;
+}
+
 const MONTHS = [
   "Jan",
   "Feb",

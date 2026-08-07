@@ -8,6 +8,7 @@ import type {
   ConsumerStats,
   CustomerRecord,
   Platform,
+  RevenueDayPoint,
   RevenuePoint,
   Snapshot,
 } from "@/lib/types";
@@ -47,6 +48,7 @@ async function buildSnapshot(): Promise<Snapshot> {
   const customers = new Map<string, CustomerRecord>();
   const consumers = new Map<string, ConsumerStats>();
   const revenue = new Map<string, RevenuePoint>();
+  const revenueDaily = new Map<string, RevenueDayPoint>();
   const platforms = new Map<string, Platform>(
     DEFAULT_PLATFORMS.map((p) => [p.id, p]),
   );
@@ -57,6 +59,8 @@ async function buildSnapshot(): Promise<Snapshot> {
     for (const c of r.consumers ?? []) consumers.set(c.platform, c);
     for (const p of r.revenue ?? [])
       revenue.set(`${p.month}|${p.platform}`, p);
+    for (const p of r.revenueDaily ?? [])
+      revenueDaily.set(`${p.date}|${p.platform}`, p);
   }
 
   // Any platform referenced by data but never declared still gets a name.
@@ -82,6 +86,9 @@ async function buildSnapshot(): Promise<Snapshot> {
     customers: [...customers.values()],
     consumers: [...consumers.values()],
     revenue: [...revenue.values()].sort((a, b) => a.month.localeCompare(b.month)),
+    revenueDaily: [...revenueDaily.values()].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    ),
     sources: results.map((r) => r.status),
   };
 }

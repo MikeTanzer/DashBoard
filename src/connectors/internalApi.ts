@@ -5,6 +5,7 @@ import type {
   CustomerRecord,
   DataDomain,
   Platform,
+  RevenueDayPoint,
   RevenuePoint,
 } from "@/lib/types";
 import { normalizeState } from "@/lib/states";
@@ -43,6 +44,14 @@ import { normalizeState } from "@/lib/states";
  *       "platform": "webjoint",
  *       "saasCents": 4120000,
  *       "usageCents": 1875000
+ *     }],
+ *     // Optional. Powers the 1W / 1M ranges. Send it only if you hold real
+ *     // day-level figures — monthly totals are never split into days.
+ *     "revenueDaily": [{
+ *       "date": "2026-07-31",
+ *       "platform": "webjoint",
+ *       "saasCents": 138400,
+ *       "usageCents": 61200
  *     }]
  *   }
  */
@@ -52,6 +61,7 @@ interface ApiPayload {
   customers?: Partial<CustomerRecord>[];
   consumers?: Partial<ConsumerStats>[];
   revenue?: Partial<RevenuePoint>[];
+  revenueDaily?: Partial<RevenueDayPoint>[];
 }
 
 export const internalApiConnector: Connector = {
@@ -121,12 +131,21 @@ export const internalApiConnector: Connector = {
         saasCents: Math.round(r.saasCents ?? 0),
         usageCents: Math.round(r.usageCents ?? 0),
       }));
-    if (revenue.length) provides.push("revenue");
+    const revenueDaily: RevenueDayPoint[] = (payload.revenueDaily ?? [])
+      .filter((r): r is RevenueDayPoint => Boolean(r.date))
+      .map((r) => ({
+        date: r.date,
+        platform: r.platform ?? "unassigned",
+        saasCents: Math.round(r.saasCents ?? 0),
+        usageCents: Math.round(r.usageCents ?? 0),
+      }));
+    if (revenue.length || revenueDaily.length) provides.push("revenue");
 
     const summary = [
       customers.length && `${customers.length} customers`,
       consumers.length && `${consumers.length} platform consumer rollups`,
       revenue.length && `${revenue.length} revenue months`,
+      revenueDaily.length && `${revenueDaily.length} revenue days`,
     ]
       .filter(Boolean)
       .join(", ");
@@ -135,6 +154,7 @@ export const internalApiConnector: Connector = {
       customers,
       consumers,
       revenue,
+      revenueDaily,
       platforms: payload.platforms,
       status: {
         id: "internal-api",

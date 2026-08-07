@@ -62,6 +62,11 @@ export function toMonthlyCents(
   return Math.round((amountCents * perMonth) / divisor);
 }
 
+/** "YYYY-MM-DD" in UTC. */
+export function dayKey(d: Date): string {
+  return `${monthKey(d)}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
 export function monthKey(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }

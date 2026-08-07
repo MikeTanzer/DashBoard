@@ -58,6 +58,20 @@ export interface RevenuePoint {
   usageCents: number;
 }
 
+/**
+ * One day of recognized revenue. Optional: only sources with timestamped
+ * transactions can produce it (Stripe can; a hand-maintained file usually
+ * can't). Ranges shorter than a few months read off this series; without it
+ * those ranges say so rather than faking a week out of monthly buckets.
+ */
+export interface RevenueDayPoint {
+  /** "YYYY-MM-DD" */
+  date: string;
+  platform: PlatformId;
+  saasCents: number;
+  usageCents: number;
+}
+
 export type SourceId = "manual" | "stripe" | "database" | "internal-api";
 
 export type SourceState = "ok" | "not_configured" | "error" | "partial";
@@ -81,6 +95,7 @@ export interface ConnectorResult {
   customers?: CustomerRecord[];
   consumers?: ConsumerStats[];
   revenue?: RevenuePoint[];
+  revenueDaily?: RevenueDayPoint[];
   platforms?: Platform[];
   status: SourceStatus;
 }
@@ -93,6 +108,7 @@ export interface Snapshot {
   customers: CustomerRecord[];
   consumers: ConsumerStats[];
   revenue: RevenuePoint[];
+  revenueDaily: RevenueDayPoint[];
   sources: SourceStatus[];
 }
 

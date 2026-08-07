@@ -7,6 +7,7 @@ import type {
   CustomerRecord,
   DataDomain,
   Platform,
+  RevenueDayPoint,
   RevenuePoint,
 } from "@/lib/types";
 import { normalizeState } from "@/lib/states";
@@ -25,6 +26,7 @@ interface ManualFile {
   customers?: Partial<CustomerRecord>[];
   consumers?: ConsumerStats[];
   revenue?: RevenuePoint[];
+  revenueDaily?: RevenueDayPoint[];
 }
 
 function filePath(): string {
@@ -81,12 +83,14 @@ export const manualConnector: Connector = {
     if (consumers.length) provides.push("consumers");
 
     const revenue = parsed.revenue ?? [];
-    if (revenue.length) provides.push("revenue");
+    const revenueDaily = parsed.revenueDaily ?? [];
+    if (revenue.length || revenueDaily.length) provides.push("revenue");
 
     const summary = [
       customers.length && `${customers.length} customers`,
       consumers.length && `${consumers.length} platform consumer rollups`,
       revenue.length && `${revenue.length} revenue months`,
+      revenueDaily.length && `${revenueDaily.length} revenue days`,
     ]
       .filter(Boolean)
       .join(", ");
@@ -95,6 +99,7 @@ export const manualConnector: Connector = {
       customers,
       consumers,
       revenue,
+      revenueDaily,
       platforms: parsed.platforms,
       status: {
         id: "manual",

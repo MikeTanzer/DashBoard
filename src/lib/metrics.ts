@@ -25,10 +25,25 @@ export interface MonthRevenue {
   partial?: boolean;
 }
 
+/** One day of revenue. Same shape as a month, keyed by date. */
+export interface DayRevenue {
+  date: string;
+  saasCents: number;
+  usageCents: number;
+  totalCents: number;
+  /** Today — still accruing. */
+  partial?: boolean;
+}
+
 /** "YYYY-MM" for right now, in UTC. */
 function currentMonthKey(): string {
   const d = new Date();
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** "YYYY-MM-DD" for today, in UTC. */
+function todayKey(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export interface DashboardMetrics {
@@ -45,6 +60,7 @@ export interface DashboardMetrics {
   avgUsagePerCustomer: Metric<number>;
   usageShare: Metric<number>;
   revenueByMonth: Metric<MonthRevenue[]>;
+  revenueByDay: Metric<DayRevenue[]>;
   revenueMoMChange: Metric<number>;
   annualRunRate: Metric<number>;
 
@@ -61,6 +77,8 @@ const NEEDS_STATE =
   "Customer records exist, but none carry a state. Add an address state in Stripe, or a `state` field on each customer.";
 const NEEDS_CONSUMERS =
   "Connect the platform database (consumer rollup query) or have the internal admin API return a `consumers` array.";
+const NEEDS_DAILY_REVENUE =
+  "Day-level revenue needs a source with timestamped transactions. Stripe supplies it automatically once STRIPE_SECRET_KEY is set; the admin API can send a `revenueDaily` array. Monthly totals can't be split into days after the fact.";
 const NEEDS_REVENUE_HISTORY =
   "Needs at least 2 months of revenue history from Stripe invoices, the admin API, or data/network.json.";
 
@@ -81,6 +99,7 @@ export function computeMetrics(
   );
   const consumers = snapshot.consumers.filter((c) => inScope(c.platform));
   const revenue = snapshot.revenue.filter((r) => inScope(r.platform));
+  const revenueDaily = snapshot.revenueDaily.filter((r) => inScope(r.platform));
 
   const hasCustomers = customers.length > 0;
 
@@ -145,6 +164,28 @@ export function computeMetrics(
     if (prev.totalCents === 0) return unavailable(NEEDS_REVENUE_HISTORY);
     return available((last.totalCents - prev.totalCents) / prev.totalCents);
   })();
+
+  // --- Daily revenue --------------------------------------------------------
+  // Only sources with timestamped transactions produce this. When it's absent
+  // the short ranges say what's needed instead of resampling monthly buckets,
+  // which would invent a shape the data never had.
+  const today = todayKey();
+  const dayMap = new Map<string, DayRevenue>();
+  for (const r of revenueDaily) {
+    const d = dayMap.get(r.date) ?? {
+      date: r.date,
+      saasCents: 0,
+      usageCents: 0,
+      totalCents: 0,
+    };
+    d.saasCents += r.saasCents;
+    d.usageCents += r.usageCents;
+    d.totalCents = d.saasCents + d.usageCents;
+    dayMap.set(r.date, d);
+  }
+  const days = [...dayMap.values()]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((d) => (d.date === today ? { ...d, partial: true } : d));
 
   // --- Consumers ------------------------------------------------------------
   const hasConsumers = consumers.length > 0;
@@ -213,6 +254,10 @@ export function computeMetrics(
     revenueByMonth: months.length
       ? available(months)
       : unavailable(NEEDS_REVENUE_HISTORY),
+
+    revenueByDay: days.length
+      ? available(days)
+      : unavailable(NEEDS_DAILY_REVENUE),
 
     revenueMoMChange: mom,
 

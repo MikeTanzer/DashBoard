@@ -36,15 +36,23 @@ PYROTREE_INVESTOR_PASSWORD=<pick a different one>
 
 **Customers**
 - Current customers
-- States with customers, plus a grid map / ranked bars / table of the breakdown
+- States with customers, plus a US map / ranked bars / table of the breakdown
 - Average gross revenue per customer
 - Average SaaS revenue per paying customer
 - Average usage revenue per paying customer
 
 **Revenue**
 - Monthly recurring revenue (the hero figure) and annual run rate
-- 12 months of collected revenue, stacked SaaS vs Usage
+- Collected revenue, stacked SaaS vs Usage, over **1W / 1M / 3M / 6M / 12M / All**
+  (3M by default)
 - Month-over-month change, computed on complete months only
+
+The two short ranges are **day-grained** and read a separate daily series.
+A week has no meaning in monthly buckets, and resampling months into days would
+invent a shape the data never had — so if no source supplies day-level figures,
+those ranges say what's needed instead of guessing. Stripe supplies them
+automatically (invoices carry timestamps); the admin API can send a
+`revenueDaily` array; a hand-maintained file usually can't and doesn't have to.
 
 **Consumers** (shoppers on our customers' storefronts — aggregate counts only)
 - Consumers tracked
@@ -182,16 +190,19 @@ src/
     metrics.ts            every derived number, and its "not tracked" reason
     types.ts              the normalized data model
     auth.ts               HMAC session, Edge-safe
-    states.ts             USPS codes + the grid-map layout
+    states.ts             USPS codes and name normalisation
+    us-map.ts             GENERATED state geometry (npm run map)
   components/             stat tiles, charts, filters
   middleware.ts           the gate
-scripts/generate-demo.mjs seeded demo data
+scripts/generate-demo.mjs seeded demo data (monthly + daily)
+scripts/gen-us-map.mjs    regenerates us-map.ts from us-atlas
 ```
 
 ## Charts
 
 Hand-rolled SVG — no charting dependency. Colors come from a colorblind-safe
-palette validated in both light and dark mode; the state map uses quantile bins
+palette validated in both light and dark mode. The state map is a choropleth on
+real geometry (Albers USA, so Alaska and Hawaii inset), and uses quantile bins
 (customer counts are heavily skewed by the home state, and equal-width bins
 would flatten every other state into one shade). Every chart has a table view,
 so no value is reachable only by hovering.

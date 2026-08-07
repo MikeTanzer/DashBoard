@@ -102,6 +102,7 @@ export default async function DashboardPage({
           {m.monthlyRevenue.available && m.revenueByMonth.available ? (
             <RevenueCard
               data={m.revenueByMonth.value}
+              daily={m.revenueByDay}
               mrrCents={m.monthlyRevenue.value}
               annualRunRateCents={
                 m.annualRunRate.available ? m.annualRunRate.value : 0

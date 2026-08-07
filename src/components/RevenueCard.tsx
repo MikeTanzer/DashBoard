@@ -1,23 +1,55 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import type { MonthRevenue } from "@/lib/metrics";
-import { axisTicks, compactMoney, monthLabel, money, percent } from "@/lib/format";
+import type { DayRevenue, MonthRevenue } from "@/lib/metrics";
+import type { Metric } from "@/lib/types";
+import {
+  axisTicks,
+  compactMoney,
+  dayLabel,
+  monthLabel,
+  money,
+  percent,
+} from "@/lib/format";
+import { NotTracked } from "./StatTile";
 
 type View = "chart" | "table";
 
-/** Trailing-window options. 3 months is the default — the operating view. */
+/**
+ * Trailing windows. 3 months is the default — the operating view.
+ *
+ * The two short ranges are DAY-grained and read a different series: a week has
+ * no meaning in monthly buckets, and resampling months into days would invent
+ * a shape the data never had. Only sources with timestamped transactions
+ * (Stripe, the admin API) can supply it, so these two ranges degrade to the
+ * usual "Not yet tracked" copy when nothing does.
+ */
 const RANGES = [
-  { id: "3m", label: "3M", months: 3 },
-  { id: "6m", label: "6M", months: 6 },
-  { id: "12m", label: "12M", months: 12 },
-  { id: "all", label: "All", months: Infinity },
+  { id: "1w", label: "1W", grain: "day", count: 7 },
+  { id: "1m", label: "1M", grain: "day", count: 30 },
+  { id: "3m", label: "3M", grain: "month", count: 3 },
+  { id: "6m", label: "6M", grain: "month", count: 6 },
+  { id: "12m", label: "12M", grain: "month", count: 12 },
+  { id: "all", label: "All", grain: "month", count: Infinity },
 ] as const;
 
 type RangeId = (typeof RANGES)[number]["id"];
 
+/** What the chart actually plots, once the range has picked a series. */
+interface Bar {
+  key: string;
+  label: string;
+  saasCents: number;
+  usageCents: number;
+  totalCents: number;
+  partial?: boolean;
+  /** Long form for the tooltip and the table. */
+  full: string;
+}
+
 interface Props {
   data: MonthRevenue[];
+  daily: Metric<DayRevenue[]>;
   /** Current MRR in cents — a point-in-time figure, so the range doesn't move it. */
   mrrCents: number;
   annualRunRateCents: number;
@@ -34,6 +66,7 @@ interface Props {
  */
 export function RevenueCard({
   data,
+  daily,
   mrrCents,
   annualRunRateCents,
   usageShare,
@@ -44,14 +77,40 @@ export function RevenueCard({
   const [hover, setHover] = useState<{
     x: number;
     y: number;
-    point: MonthRevenue;
+    point: Bar;
   } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  const months = useMemo(() => {
-    const n = RANGES.find((r) => r.id === range)!.months;
-    return n === Infinity ? data : data.slice(-n);
-  }, [data, range]);
+  const spec = RANGES.find((r) => r.id === range)!;
+  const dayGrain = spec.grain === "day";
+  const dailyMissing = dayGrain && !daily.available;
+
+  const months = useMemo<Bar[]>(() => {
+    if (dayGrain) {
+      if (!daily.available) return [];
+      return daily.value.slice(-spec.count).map((d) => ({
+        key: d.date,
+        label: dayLabel(d.date),
+        saasCents: d.saasCents,
+        usageCents: d.usageCents,
+        totalCents: d.totalCents,
+        partial: d.partial,
+        full: dayLabel(d.date, true),
+      }));
+    }
+    const src = spec.count === Infinity ? data : data.slice(-spec.count);
+    const lastYear = src[src.length - 1]?.month.slice(0, 4);
+    const spansYears = new Set(src.map((m) => m.month.slice(0, 4))).size > 1;
+    return src.map((m) => ({
+      key: m.month,
+      label: monthLabel(m.month, spansYears && m.month.slice(0, 4) !== lastYear),
+      saasCents: m.saasCents,
+      usageCents: m.usageCents,
+      totalCents: m.totalCents,
+      partial: m.partial,
+      full: monthLabel(m.month, true),
+    }));
+  }, [data, daily, dayGrain, spec]);
 
   // Fixed viewBox with the slots dividing it, so a 12-month view fills the
   // card. Slot width is capped and the group centred, so a 3-month view shows
@@ -77,12 +136,9 @@ export function RevenueCard({
   const yOf = (cents: number) => PLOT_H - (cents / scaleMax) * PLOT_H;
 
   const hasPartial = months.some((m) => m.partial);
-  const lastComplete = [...months].reverse().find((m) => !m.partial)?.month;
-  const lastYear = months[months.length - 1]?.month.slice(0, 4);
-  // With a short window every month is in the same year — no need to repeat it.
-  const spansYears = new Set(months.map((m) => m.month.slice(0, 4))).size > 1;
+  const lastComplete = [...months].reverse().find((m) => !m.partial)?.key;
 
-  const showTip = (e: React.MouseEvent, point: MonthRevenue) => {
+  const showTip = (e: React.MouseEvent, point: Bar) => {
     const rect = wrapRef.current?.getBoundingClientRect();
     if (!rect) return;
     setHover({ x: e.clientX - rect.left, y: e.clientY - rect.top, point });
@@ -125,13 +181,20 @@ export function RevenueCard({
         style={{ borderTop: "1px solid var(--border)" }}
       >
         <div className="flex items-baseline justify-between gap-3 mb-1">
-          <h2 className="text-sm font-semibold">Collected revenue by month</h2>
+          <h2 className="text-sm font-semibold">
+            Collected revenue by {dayGrain ? "day" : "month"}
+          </h2>
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-            {months.length} month{months.length === 1 ? "" : "s"}
+            {months.length} {dayGrain ? "day" : "month"}
+            {months.length === 1 ? "" : "s"}
           </span>
         </div>
 
-        {view === "chart" ? (
+        {dailyMissing ? (
+          <div className="py-2">
+            <NotTracked needs={daily.available ? "" : daily.needs} />
+          </div>
+        ) : view === "chart" ? (
           <div className="overflow-x-auto">
             <svg
               viewBox={`0 0 ${VB_W} ${h}`}
@@ -172,7 +235,7 @@ export function RevenueCard({
 
                 return (
                   <g
-                    key={m.month}
+                    key={m.key}
                     opacity={m.partial ? 0.5 : 1}
                     onMouseMove={(e) => showTip(e, m)}
                     onMouseLeave={() => setHover(null)}
@@ -201,7 +264,7 @@ export function RevenueCard({
                         className="texture-a"
                       />
                     ) : null}
-                    {lastComplete === m.month ? (
+                    {lastComplete === m.key ? (
                       <text
                         x={cx}
                         y={saasTop - 8}
@@ -219,10 +282,7 @@ export function RevenueCard({
                       y={PLOT_H + 17}
                       textAnchor="middle"
                     >
-                      {monthLabel(
-                        m.month,
-                        spansYears && m.month.slice(0, 4) !== lastYear,
-                      )}
+                      {m.label}
                       {m.partial ? "*" : ""}
                     </text>
                   </g>
@@ -262,8 +322,8 @@ export function RevenueCard({
             </svg>
             {hasPartial ? (
               <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
-                * Month still in progress — shown faded, and excluded from the
-                month-over-month figure.
+                * {dayGrain ? "Today" : "Month"} still in progress — shown
+                faded, and excluded from the month-over-month figure.
               </p>
             ) : null}
           </div>
@@ -272,7 +332,7 @@ export function RevenueCard({
             <table className="dataview">
               <thead>
                 <tr>
-                  <th>Month</th>
+                  <th>{dayGrain ? "Day" : "Month"}</th>
                   <th className="num">SaaS</th>
                   <th className="num">Usage</th>
                   <th className="num">Total</th>
@@ -280,9 +340,9 @@ export function RevenueCard({
               </thead>
               <tbody>
                 {[...months].reverse().map((m) => (
-                  <tr key={m.month}>
+                  <tr key={m.key}>
                     <td>
-                      {monthLabel(m.month, true)}
+                      {m.full}
                       {m.partial ? (
                         <span style={{ color: "var(--text-muted)" }}>
                           {" "}
@@ -304,7 +364,7 @@ export function RevenueCard({
       {hover && view === "chart" ? (
         <div className="viz-tooltip" style={{ left: hover.x, top: hover.y }}>
           <div className="font-semibold">
-            {monthLabel(hover.point.month, true)}
+            {hover.point.full}
             {hover.point.partial ? (
               <span className="font-normal" style={{ color: "var(--text-muted)" }}>
                 {" "}
