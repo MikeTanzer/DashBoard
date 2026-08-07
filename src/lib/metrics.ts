@@ -95,6 +95,16 @@ export interface DashboardMetrics {
   avgGrossPerCustomer: Metric<number>;
   avgSaasPerCustomer: Metric<number>;
   avgUsagePerCustomer: Metric<number>;
+  /**
+   * SaaS and usage per customer over ALL customers, so the two SUM to
+   * avgGrossPerCustomer. The pair above divides by paying customers only,
+   * which is the right way to read "what does a usage customer spend" but
+   * cannot be stacked under a gross figure — different denominators.
+   */
+  avgSaasShareCents: Metric<number>;
+  avgUsageShareCents: Metric<number>;
+  /** How many customers are billed for usage at all. */
+  usageBillingCustomers: number;
   usageShare: Metric<number>;
   revenueByMonth: Metric<MonthRevenue[]>;
   revenueByDay: Metric<DayRevenue[]>;
@@ -514,6 +524,14 @@ export function computeMetrics(
     avgGrossPerCustomer: hasCustomers
       ? available(Math.round(totalCents / customers.length))
       : unavailable(NEEDS_CUSTOMERS),
+
+    avgSaasShareCents: hasCustomers
+      ? available(Math.round(saasCents / customers.length))
+      : unavailable(NEEDS_CUSTOMERS),
+    avgUsageShareCents: hasCustomers
+      ? available(Math.round(usageCents / customers.length))
+      : unavailable(NEEDS_CUSTOMERS),
+    usageBillingCustomers: payingUsage,
 
     avgSaasPerCustomer: payingSaas
       ? available(

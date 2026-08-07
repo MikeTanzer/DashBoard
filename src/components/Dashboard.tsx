@@ -12,6 +12,7 @@ import {
   utcStamp,
 } from "@/lib/format";
 import { StatTile, NotTracked } from "@/components/StatTile";
+import { RevenuePerCustomer } from "@/components/RevenuePerCustomer";
 import { StatesCard } from "@/components/StatesCard";
 import { RevenueCard } from "@/components/RevenueCard";
 import { SourcesPanel } from "@/components/SourcesPanel";
@@ -152,6 +153,13 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
                 : undefined
             }
           />
+          {/* A single running total with no time dimension in the source. */}
+          <StatTile
+            label="Consumers tracked"
+            metric={m.consumersTracked}
+            format={compactNumber}
+            hint="All time — the source keeps no history"
+          />
           <StatTile
             label="States with customers"
             metric={m.stateCount}
@@ -163,13 +171,6 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
                   : `No new states ${windowPhrase(range)}`
                 : undefined
             }
-          />
-          {/* A single running total with no time dimension in the source. */}
-          <StatTile
-            label="Consumers tracked"
-            metric={m.consumersTracked}
-            format={compactNumber}
-            hint="All time — the source keeps no history"
           />
           {/* Asks the source for the window this range actually covers. A
               purchaser count isn't derivable from a neighbouring window, so an
@@ -190,23 +191,10 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           />
         </div>
 
-        {/* Row 2 — unit economics: what that reach is worth ---------------- */}
+        {/* Row 2 — unit economics. Two half-width tiles keep the same gutters
+            as the 4-up row above, so the grid rhythm holds. ---------------- */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-          <StatTile
-            label="Avg gross per customer"
-            metric={m.avgGrossPerCustomer}
-            format={(v) => `${money(v)}/mo`}
-          />
-          <StatTile
-            label="Avg SaaS per customer"
-            metric={m.avgSaasPerCustomer}
-            format={(v) => `${money(v)}/mo`}
-          />
-          <StatTile
-            label="Avg usage per customer"
-            metric={m.avgUsagePerCustomer}
-            format={(v) => `${money(v)}/mo`}
-          />
+          <RevenuePerCustomer m={m} />
           {/* A balance, not a flow: it doesn't move with the time range, so no
               window is named here. The as-of date is the honest caveat — a
               stale balance looks identical to a current one. */}
@@ -221,6 +209,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
                   : "As-of date not reported"
                 : undefined
             }
+            span={2}
           />
         </div>
 

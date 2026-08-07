@@ -21,7 +21,7 @@ export function StatTile({
 }: Props) {
   return (
     <div
-      className={`card p-5 flex flex-col gap-2 ${span === 2 ? "sm:col-span-2" : ""}`}
+      className={`card p-5 flex flex-col gap-2 ${span === 2 ? "lg:col-span-2" : ""}`}
     >
       <div className="eyebrow">{label}</div>
 
