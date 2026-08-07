@@ -156,9 +156,7 @@ export function StatesCard({ data, customersWithoutState, recency }: Props) {
         </div>
 
         <aside className="states-side">
-          <div className="flex justify-end">
-            <ViewToggle view={view} onChange={setView} />
-          </div>
+          <ViewToggle view={view} onChange={setView} />
 
           {recency?.length ? (
             <div className="recency-panel" aria-label="Consumer recency">

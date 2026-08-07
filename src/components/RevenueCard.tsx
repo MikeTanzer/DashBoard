@@ -48,6 +48,7 @@ export function RevenueCard({
     x: number;
     y: number;
     point: Bar;
+    index: number;
   } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -84,10 +85,25 @@ export function RevenueCard({
   const hasPartial = bars.some((b) => b.partial);
   const lastComplete = [...bars].reverse().find((b) => !b.partial)?.key;
 
-  const showTip = (e: React.MouseEvent, point: Bar) => {
+  const showTip = (e: React.MouseEvent, point: Bar, index: number) => {
     const rect = wrapRef.current?.getBoundingClientRect();
     if (!rect) return;
-    setHover({ x: e.clientX - rect.left, y: e.clientY - rect.top, point });
+    setHover({ x: e.clientX - rect.left, y: e.clientY - rect.top, point, index });
+  };
+
+  /**
+   * Change against the preceding bucket in view.
+   *
+   * Skipped when either side is still in progress: a half-finished month
+   * against a whole one always reads as a collapse, which is the same trap the
+   * headline comparison avoids by using complete periods only.
+   */
+  const changeVsPrevious = (i: number): number | null => {
+    const cur = bars[i];
+    const prev = bars[i - 1];
+    if (!prev || cur.partial || prev.partial) return null;
+    if (prev.totalCents === 0) return null;
+    return (cur.totalCents - prev.totalCents) / prev.totalCents;
   };
 
   return (
@@ -192,7 +208,7 @@ export function RevenueCard({
                     <g
                       key={b.key}
                       opacity={b.partial ? 0.5 : 1}
-                      onMouseMove={(e) => showTip(e, b)}
+                      onMouseMove={(e) => showTip(e, b, i)}
                       onMouseLeave={() => setHover(null)}
                     >
                       <rect
@@ -360,6 +376,21 @@ export function RevenueCard({
           >
             Total <strong>{money(hover.point.totalCents)}</strong>
           </div>
+          {(() => {
+            const change = changeVsPrevious(hover.index);
+            if (change === null) return null;
+            const up = change >= 0;
+            return (
+              <div className="flex items-center gap-1.5">
+                <span style={{ color: up ? "#4ade80" : "#fb7185" }}>
+                  {up ? "▲" : "▼"} {Math.abs(change * 100).toFixed(1)}%
+                </span>
+                <span className="tip-label">
+                  vs {bars[hover.index - 1].full}
+                </span>
+              </div>
+            );
+          })()}
         </div>
       ) : null}
     </section>

@@ -279,6 +279,18 @@ body {
   gap: 12px;
 }
 
+/* The view toggle spans the column so it lines up with the panel beneath it —
+   an auto-width control floating above a full-width card reads as misaligned.
+   Scoped to this column so segmented controls elsewhere keep hugging their
+   labels. */
+.states-side .seg {
+  width: 100%;
+}
+.states-side .seg button {
+  flex: 1;
+  text-align: center;
+}
+
 .recency-panel {
   border: 1px solid var(--border);
   border-radius: 14px;
