@@ -25,6 +25,23 @@ function rand() {
 const pick = (arr) => arr[Math.floor(rand() * arr.length)];
 const between = (lo, hi) => lo + Math.floor(rand() * (hi - lo + 1));
 
+// Anchored to the real UTC date, not a hardcoded one — otherwise the demo
+// silently goes stale by a day every day, and "today" stops lining up with the
+// dashboard's own idea of today (which is what marks a period in progress).
+const TODAY = new Date();
+TODAY.setUTCHours(0, 0, 0, 0);
+const MONTH_START = new Date(
+  Date.UTC(TODAY.getUTCFullYear(), TODAY.getUTCMonth(), 1),
+);
+const CURRENT_MONTH = monthKeyOf(TODAY);
+const DAYS_IN_MONTH = new Date(
+  Date.UTC(TODAY.getUTCFullYear(), TODAY.getUTCMonth() + 1, 0),
+).getUTCDate();
+
+function monthKeyOf(d) {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 // -- shape of the demo network ------------------------------------------------
 // Weighted so CA dominates, which is what a cannabis-software network looks like.
 const WEBJOINT_STATES = [
@@ -81,7 +98,7 @@ function makeCustomers(platform, states, count, prefix, saasBand, usageBand) {
       : 0;
 
     const monthsAgo = between(1, 40);
-    const started = new Date(Date.UTC(2026, 7, 1));
+    const started = new Date(MONTH_START);
     started.setUTCMonth(started.getUTCMonth() - monthsAgo);
 
     out.push({
@@ -132,16 +149,16 @@ for (const platform of ["webjoint", "menu"]) {
   // i = 1 is the last COMPLETE month and is anchored exactly to current MRR.
   // i = 0 is the month in progress, billed pro-rata so far.
   for (let i = 11; i >= 0; i--) {
-    const d = new Date(Date.UTC(2026, 7, 1));
+    const d = new Date(MONTH_START);
     d.setUTCMonth(d.getUTCMonth() - i);
-    const month = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    const month = monthKeyOf(d);
 
     const decay = Math.pow(MONTHLY_GROWTH, -(i - 1));
     // Subscriptions are steady; usage swings with the season.
     const saasWobble = i === 1 ? 1 : 0.98 + rand() * 0.04;
     const usageWobble = i === 1 ? 1 : 0.86 + rand() * 0.26;
-    // Aug 6 of a 31-day month.
-    const elapsed = i === 0 ? 6 / 31 : 1;
+    // The current month is only billed as far as today.
+    const elapsed = i === 0 ? TODAY.getUTCDate() / DAYS_IN_MONTH : 1;
 
     revenue.push({
       month,
@@ -159,8 +176,6 @@ for (const platform of ["webjoint", "menu"]) {
 // reconcile instead of telling two different stories.
 const DAYS_OF_DAILY = 120;
 const revenueDaily = [];
-const TODAY = new Date(Date.UTC(2026, 7, 6));
-const CURRENT_MONTH = "2026-08";
 
 for (const platform of ["webjoint", "menu"]) {
   const byMonth = new Map(
@@ -174,7 +189,7 @@ for (const platform of ["webjoint", "menu"]) {
   for (let back = DAYS_OF_DAILY - 1; back >= 0; back--) {
     const d = new Date(TODAY);
     d.setUTCDate(d.getUTCDate() - back);
-    const month = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    const month = monthKeyOf(d);
     if (!byMonth.has(month)) continue;
 
     // Sat/Sun run lighter. These are raw weights, normalised below — scaling

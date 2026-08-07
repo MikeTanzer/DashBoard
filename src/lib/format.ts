@@ -99,14 +99,26 @@ function trim(v: number): string {
   return (Number.isInteger(r) ? r.toFixed(0) : r.toFixed(1)).toString();
 }
 
-/** Nice round axis ticks covering [0, max]. */
+/**
+ * Nice round axis ticks covering [0, max].
+ *
+ * The last tick is guaranteed to be >= max, because callers scale the plot to
+ * it. Stopping one step short (which a `t <= max` loop does whenever the step
+ * doesn't divide max evenly) makes every mark taller than the plot area and
+ * pushes the top ones out of the viewBox entirely.
+ */
 export function axisTicks(max: number, count = 4): number[] {
   if (max <= 0) return [0];
   const raw = max / count;
   const mag = Math.pow(10, Math.floor(Math.log10(raw)));
   const norm = raw / mag;
   const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+
   const ticks: number[] = [];
-  for (let t = 0; t <= max + step * 0.001; t += step) ticks.push(t);
+  for (let t = 0; ; t += step) {
+    ticks.push(t);
+    // Tolerance guards the float accumulation in `t += step`.
+    if (t >= max - step * 1e-9) break;
+  }
   return ticks;
 }

@@ -107,7 +107,6 @@ export default async function DashboardPage({
               annualRunRateCents={
                 m.annualRunRate.available ? m.annualRunRate.value : 0
               }
-              usageShare={m.usageShare.available ? m.usageShare.value : null}
               scopeLabel={scopeLabel}
             />
           ) : (
