@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { THEME_COOKIE, readTheme } from "@/lib/theme";
-import { readRange, windowPhrase } from "@/lib/range";
+import { readRange, resolveView, windowPhrase } from "@/lib/range";
 import { getSnapshot } from "@/connectors";
 import { computeMetrics, platformBreakdown } from "@/lib/metrics";
 import {
@@ -29,15 +29,29 @@ export default async function DashboardPage({
     range?: string;
     from?: string;
     to?: string;
+    grain?: string;
   }>;
 }) {
-  const { platform, range: rangeParam, from, to } = await searchParams;
-  const range = readRange(rangeParam, from, to);
+  const {
+    platform,
+    range: rangeParam,
+    from,
+    to,
+    grain: grainParam,
+  } = await searchParams;
+  // The bucket can widen the window, so resolve the pair before anything reads
+  // either one.
+  const { range, bucket } = resolveView(readRange(rangeParam, from, to), grainParam);
   const theme = readTheme((await cookies()).get(THEME_COOKIE)?.value);
 
   const snapshot = await getSnapshot();
   const selected = platform ? platform.split(",").filter(Boolean) : [];
-  const m = computeMetrics(snapshot, selected.length ? selected : null, range);
+  const m = computeMetrics(
+    snapshot,
+    selected.length ? selected : null,
+    range,
+    bucket,
+  );
   const platforms = platformBreakdown(snapshot);
 
   const scopeLabel =
@@ -88,12 +102,15 @@ export default async function DashboardPage({
             range={range.id}
             from={range.from}
             to={range.to}
+            bucket={bucket}
           />
           <RangePicker
             range={range.id}
             platform={selected}
             from={range.from}
             to={range.to}
+            bucket={bucket}
+            rangeDays={range.days}
           />
         </div>
 
@@ -111,6 +128,7 @@ export default async function DashboardPage({
                 m.annualRunRate.available ? m.annualRunRate.value : 0
               }
               range={range}
+              bucket={bucket}
               scopeLabel={scopeLabel}
               unavailableReason={m.bars.available ? undefined : m.bars.needs}
             />
@@ -207,6 +225,9 @@ export default async function DashboardPage({
             <StatesCard
               data={m.customersByState.value}
               customersWithoutState={m.customersWithoutState}
+              recency={
+                m.consumerRecency.available ? m.consumerRecency.value : undefined
+              }
             />
           ) : (
             <EmptyCard
@@ -215,35 +236,6 @@ export default async function DashboardPage({
             />
           )}
         </div>
-
-        {/* Consumer engagement -------------------------------------------- */}
-        <section className="card p-6 mb-4">
-          <h2 className="text-[15px] font-bold">Consumer engagement</h2>
-          <p
-            className="text-[12.5px] mt-1 mb-5"
-            style={{ color: "var(--text-secondary)" }}
-          >
-            Shoppers on our customers&apos; storefronts — aggregate counts only,
-            no personal data leaves the platforms.
-          </p>
-          {m.consumersTracked.available ? (
-            <ConsumerFunnel
-              tracked={m.consumersTracked.value}
-              d30={
-                m.consumersPurchased30d.available
-                  ? m.consumersPurchased30d.value
-                  : 0
-              }
-              d180={
-                m.consumersPurchased180d.available
-                  ? m.consumersPurchased180d.value
-                  : 0
-              }
-            />
-          ) : (
-            <NotTracked needs={m.consumersTracked.needs} />
-          )}
-        </section>
 
         {/* Platform breakdown ---------------------------------------------- */}
         {platforms.length ? (
@@ -346,67 +338,3 @@ function EmptyCard({ title, needs }: { title: string; needs: string }) {
   );
 }
 
-/**
- * Ordered stages, so an ordinal ramp is correct here (not a nominal palette).
- * Values are direct-labeled, so nothing is gated behind hover.
- */
-function ConsumerFunnel({
-  tracked,
-  d30,
-  d180,
-}: {
-  tracked: number;
-  d30: number;
-  d180: number;
-}) {
-  const stages = [
-    { label: "Tracked", value: tracked, fill: "var(--seq-200)", ink: "#0b0b0b" },
-    {
-      label: "Purchased in 180 days",
-      value: d180,
-      fill: "var(--seq-400)",
-      ink: "#ffffff",
-    },
-    {
-      label: "Purchased in 30 days",
-      value: d30,
-      fill: "var(--seq-600)",
-      ink: "#ffffff",
-    },
-  ];
-  const max = Math.max(1, tracked);
-
-  return (
-    <div className="flex flex-col gap-3">
-      {stages.map((s) => (
-        <div key={s.label} className="flex items-center gap-3">
-          <div
-            className="text-xs w-[104px] sm:w-[168px] shrink-0"
-            style={{ color: "var(--text-secondary)" }}
-          >
-            {s.label}
-          </div>
-          <div className="flex-1 min-w-0 flex items-center gap-2.5">
-            <div
-              style={{
-                width: `${Math.max(1.5, (s.value / max) * 100)}%`,
-                height: 18,
-                background: s.fill,
-                borderRadius: "2px 4px 4px 2px",
-              }}
-            />
-            <span className="text-sm font-semibold shrink-0">
-              {compactNumber(s.value)}
-            </span>
-            <span
-              className="text-xs shrink-0"
-              style={{ color: "var(--text-muted)" }}
-            >
-              {percent(s.value / max, 1)}
-            </span>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}

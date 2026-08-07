@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { Bar } from "@/lib/metrics";
-import type { RangeSpec } from "@/lib/range";
+import type { Grain, RangeSpec } from "@/lib/range";
 import { axisTicks, compactMoney, money, percent } from "@/lib/format";
 import { NotTracked } from "./StatTile";
 
@@ -17,6 +17,8 @@ interface Props {
   mrrCents: number;
   annualRunRateCents: number;
   range: RangeSpec;
+  /** Bucket the bars represent — may be coarser than the range's own series. */
+  bucket: Grain;
   scopeLabel: string;
   /** Set when the range needs day-level data and no source supplies it. */
   unavailableReason?: string;
@@ -37,6 +39,7 @@ export function RevenueCard({
   mrrCents,
   annualRunRateCents,
   range,
+  bucket,
   scopeLabel,
   unavailableReason,
 }: Props) {
@@ -48,7 +51,10 @@ export function RevenueCard({
   } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  const dayGrain = range.grain === "day";
+  const dayGrain = bucket === "day";
+  const unit = { day: "day", month: "month", quarter: "quarter", year: "year" }[
+    bucket
+  ];
 
   // Fixed viewBox with the slots dividing it, so a 12-month view fills the
   // card. Slot width is capped and the group centred, so a 3-month view shows
@@ -112,7 +118,7 @@ export function RevenueCard({
           </div>
           {hasPartial && !unavailableReason ? (
             <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              Includes {dayGrain ? "today" : "this month"}, still in progress
+              Includes this {dayGrain ? "day" : unit}, still in progress
             </div>
           ) : null}
         </div>
@@ -129,11 +135,11 @@ export function RevenueCard({
       >
         <div className="flex items-baseline justify-between gap-3 mb-1">
           <h2 className="text-[13px] font-bold">
-            Collected revenue by {dayGrain ? "day" : "month"}
+            Collected revenue by {unit}
           </h2>
           {!unavailableReason ? (
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-              {bars.length} {dayGrain ? "day" : "month"}
+              {bars.length} {unit}
               {bars.length === 1 ? "" : "s"}
             </span>
           ) : null}
@@ -286,7 +292,7 @@ export function RevenueCard({
             </svg>
             {hasPartial ? (
               <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
-                * {dayGrain ? "Today" : "This month"} is still in progress —
+                * This {dayGrain ? "day" : unit} is still in progress —
                 shown faded, and it holds the total below a like-for-like
                 comparison.
               </p>
@@ -297,7 +303,7 @@ export function RevenueCard({
             <table className="dataview">
               <thead>
                 <tr>
-                  <th>{dayGrain ? "Day" : "Month"}</th>
+                  <th>{unit.charAt(0).toUpperCase() + unit.slice(1)}</th>
                   <th className="num">SaaS</th>
                   <th className="num">Usage</th>
                   <th className="num">Total</th>

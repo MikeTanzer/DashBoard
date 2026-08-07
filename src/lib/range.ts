@@ -6,14 +6,68 @@
 
 import type { ConsumerWindow } from "./types";
 
-export type Grain = "day" | "month";
+export type Grain = "day" | "month" | "quarter" | "year";
+
+/**
+ * Bucket size for the revenue chart, chosen independently of the window.
+ *
+ * `minDays` is the shortest window that yields enough buckets to be worth
+ * plotting — a quarterly chart over three months is one bar, which is a stat
+ * tile pretending to be a chart. Picking a bucket the current window can't
+ * support widens the window to `minRange` rather than silently drawing it.
+ */
+export interface BucketSpec {
+  id: Grain;
+  label: string;
+  minDays: number;
+  minRange: RangeId;
+}
+
+export const BUCKETS: BucketSpec[] = [
+  { id: "day", label: "Daily", minDays: 0, minRange: "1m" },
+  { id: "month", label: "Monthly", minDays: 80, minRange: "3m" },
+  { id: "quarter", label: "Quarterly", minDays: 250, minRange: "12m" },
+  { id: "year", label: "Annually", minDays: 600, minRange: "all" },
+];
+
+/** Daily data only exists for short windows; past ~10 weeks it's unreadable. */
+const DAY_MAX_DAYS = 70;
+
+/** The bucket a range uses when nothing is explicitly chosen. */
+export function defaultBucket(range: RangeSpec): Grain {
+  return range.days <= DAY_MAX_DAYS ? "day" : "month";
+}
+
+/**
+ * Resolves the requested bucket against the window, widening the window when
+ * the bucket needs more span. Returns the pair the whole dashboard runs on.
+ */
+export function resolveView(
+  range: RangeSpec,
+  bucketParam: string | undefined,
+): { range: RangeSpec; bucket: Grain; widened: boolean } {
+  const wanted = BUCKETS.find((b) => b.id === bucketParam);
+  if (!wanted) return { range, bucket: defaultBucket(range), widened: false };
+
+  if (wanted.id === "day" && range.days > DAY_MAX_DAYS) {
+    const narrowed = RANGES.find((r) => r.id === "1m")!;
+    return { range: narrowed, bucket: "day", widened: true };
+  }
+
+  if (range.days < wanted.minDays) {
+    const wider = RANGES.find((r) => r.id === wanted.minRange)!;
+    return { range: wider, bucket: wanted.id, widened: true };
+  }
+
+  return { range, bucket: wanted.id, widened: false };
+}
 
 export interface RangeSpec {
   id: RangeId;
   /** Button text. */
   label: string;
-  /** Which series the chart reads. */
-  grain: Grain;
+  /** Which stored series this range reads: the daily rows or the monthly ones. */
+  grain: "day" | "month";
   /** How many buckets of that grain to plot. */
   count: number;
   /** Prose for the headline: "last 7 days". */

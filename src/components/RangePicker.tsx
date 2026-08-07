@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { DEFAULT_RANGE, RANGES, type RangeId } from "@/lib/range";
+import {
+  BUCKETS,
+  DEFAULT_RANGE,
+  RANGES,
+  type Grain,
+  type RangeId,
+} from "@/lib/range";
 
 /**
  * The time range lives in the URL, like the platform filter, so the server
@@ -15,11 +21,16 @@ export function RangePicker({
   platform,
   from,
   to,
+  bucket,
+  rangeDays,
 }: {
   range: RangeId;
   platform: string[];
   from?: string;
   to?: string;
+  bucket: Grain;
+  /** Span of the current window, for greying buckets it can't support. */
+  rangeDays: number;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -53,11 +64,39 @@ export function RangePicker({
     startTransition(() => router.push(qs ? `/?${qs}` : "/", { scroll: false }));
   };
 
+  // Changing the window drops any explicit bucket, so the pair goes back to
+  // its natural pairing rather than stranding e.g. "Annually" on a 1-week view.
   const go = (next: RangeId) => {
     const params = new URLSearchParams();
     if (platform.length) params.set("platform", platform.join(","));
     if (next !== DEFAULT_RANGE) params.set("range", next);
     setOpen(false);
+    push(params);
+  };
+
+  /**
+   * Choosing a bucket keeps the window when it fits and widens it when it
+   * doesn't — a quarterly chart over three months is a single bar. The button
+   * shows which windows it will move you to.
+   */
+  const setBucket = (b: (typeof BUCKETS)[number]) => {
+    const params = new URLSearchParams();
+    if (platform.length) params.set("platform", platform.join(","));
+
+    const fits =
+      b.id === "day" ? rangeDays <= 70 : rangeDays >= b.minDays;
+
+    if (fits) {
+      if (range !== DEFAULT_RANGE) params.set("range", range);
+      if (range === "custom" && from && to) {
+        params.set("from", from);
+        params.set("to", to);
+      }
+    } else if (b.minRange !== DEFAULT_RANGE) {
+      params.set("range", b.minRange);
+    }
+
+    params.set("grain", b.id);
     push(params);
   };
 
@@ -91,6 +130,27 @@ export function RangePicker({
             {r.label}
           </button>
         ))}
+      </div>
+
+      <div className="seg" role="group" aria-label="Bucket size">
+        {BUCKETS.map((b) => {
+          const fits = b.id === "day" ? rangeDays <= 70 : rangeDays >= b.minDays;
+          return (
+            <button
+              key={b.id}
+              onClick={() => setBucket(b)}
+              aria-pressed={bucket === b.id}
+              title={
+                fits
+                  ? `Chart by ${b.label.toLowerCase()}`
+                  : `Needs a longer window — switches to ${b.minRange.toUpperCase()}`
+              }
+              style={fits ? undefined : { opacity: 0.55 }}
+            >
+              {b.label}
+            </button>
+          );
+        })}
       </div>
 
       <div className="relative" ref={popRef}>

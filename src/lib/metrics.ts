@@ -9,7 +9,7 @@ import type {
 import { available, unavailable, consumerWindowLabel } from "./types";
 import { STATE_NAMES } from "./states";
 import { dayLabel, monthLabel } from "./format";
-import type { RangeSpec } from "./range";
+import type { Grain, RangeSpec } from "./range";
 
 export interface StateCount {
   code: string;
@@ -52,6 +52,24 @@ export interface Bar {
   usageCents: number;
   totalCents: number;
   partial?: boolean;
+}
+
+/**
+ * One slice of the consumer base, by how recently they last bought.
+ *
+ * These are MUTUALLY EXCLUSIVE and sum to `tracked` — which is the whole point.
+ * The source's purchaser windows are cumulative and nested (everyone in the
+ * 30-day figure is also in the 180-day one), so plotting those directly as
+ * slices would count the same person up to five times and produce a total
+ * larger than the audience. Each band is the gap between consecutive windows.
+ */
+export interface RecencyBand {
+  key: string;
+  label: string;
+  value: number;
+  share: number;
+  /** Sequential ramp step, or null for the neutral "never" slice. */
+  step: number | null;
 }
 
 /** "YYYY-MM" for right now, in UTC. */
@@ -98,6 +116,8 @@ export interface DashboardMetrics {
   consumersPurchased: Metric<number>;
   /** Prose for that window: "last 90 days" / "ever". */
   consumerWindowLabel: string;
+  /** Exclusive recency slices of the consumer base. */
+  consumerRecency: Metric<RecencyBand[]>;
 
   // Consumers
   consumersTracked: Metric<number>;
@@ -126,6 +146,7 @@ export function computeMetrics(
   snapshot: Snapshot,
   platformFilter: PlatformId[] | null,
   range: RangeSpec,
+  bucket: Grain = range.grain,
 ): DashboardMetrics {
   const inScope = (p: PlatformId) =>
     !platformFilter || platformFilter.length === 0 || platformFilter.includes(p);
@@ -233,9 +254,16 @@ export function computeMetrics(
   // --- The selected window --------------------------------------------------
   // Everything range-scoped is derived from this one slice, so the headline,
   // the tiles and the chart cannot drift apart.
-  const dayGrain = range.grain === "day";
-  const source: (MonthRevenue | DayRevenue)[] = dayGrain ? days : months;
+  const dayGrain = bucket === "day";
   const dailyMissing = dayGrain && days.length === 0;
+
+  // Quarters and years are rolled up from the monthly series — the source has
+  // no coarser grain of its own, and monthly totals aggregate exactly.
+  const source: (MonthRevenue | DayRevenue)[] = dayGrain
+    ? days
+    : bucket === "month"
+      ? months
+      : rollUpMonths(months, bucket);
 
   // A custom range is bounded by explicit dates; the presets by a trailing
   // count. Both end up as one contiguous slice, so everything downstream is
@@ -256,8 +284,16 @@ export function computeMetrics(
     const key = isDay ? r.date : r.month;
     return {
       key,
-      label: isDay ? dayLabel(key) : monthLabel(key, spansYears(windowRows)),
-      full: isDay ? dayLabel(key, true) : monthLabel(key, true),
+      label: isDay
+        ? dayLabel(key)
+        : bucket === "month"
+          ? monthLabel(key, spansYears(windowRows))
+          : bucketShortLabel(key),
+      full: isDay
+        ? dayLabel(key, true)
+        : bucket === "month"
+          ? monthLabel(key, true)
+          : bucketLongLabel(key),
       saasCents: r.saasCents,
       usageCents: r.usageCents,
       totalCents: r.totalCents,
@@ -357,7 +393,70 @@ export function computeMetrics(
   const p180 = purchasersFor("180");
   const pWindow = purchasersFor(range.consumerWindow);
 
+  // --- Consumer recency ------------------------------------------------------
+  const recency = ((): Metric<RecencyBand[]> => {
+    if (!hasConsumers) return unavailable(NEEDS_CONSUMERS);
+    if (tracked <= 0) return unavailable(NEEDS_CONSUMERS);
+
+    const order = ["7", "30", "90", "180", "365", "ever"];
+    const present = order
+      .map((w) => ({ w, v: purchasersFor(w) }))
+      .filter((x): x is { w: string; v: number } => x.v !== null);
+
+    if (!present.length) {
+      return unavailable(
+        "Needs at least one purchaser window. Add a purchased_* column to the consumer query in src/connectors/queries.ts.",
+      );
+    }
+
+    // Cumulative windows must not shrink as they widen, and none may exceed the
+    // tracked base. Either would produce a negative slice — bad source data
+    // rather than a rendering problem, so say so instead of drawing it.
+    for (let i = 1; i < present.length; i++) {
+      if (present[i].v < present[i - 1].v) {
+        return unavailable(
+          `Purchaser windows aren't cumulative: the ${present[i].w}-day figure (${present[i].v}) is below the ${present[i - 1].w}-day one (${present[i - 1].v}). A wider window can only contain more people.`,
+        );
+      }
+    }
+    if (present[present.length - 1].v > tracked) {
+      return unavailable(
+        "More purchasers than tracked consumers — check the consumer query.",
+      );
+    }
+
+    const RAMP = [600, 500, 400, 300, 200];
+    const bands: RecencyBand[] = [];
+
+    present.forEach((cur, i) => {
+      const prev = i === 0 ? null : present[i - 1];
+      const value = cur.v - (prev?.v ?? 0);
+      if (value <= 0) return;
+      bands.push({
+        key: cur.w,
+        label: bandLabel(prev?.w ?? null, cur.w),
+        value,
+        share: value / tracked,
+        step: RAMP[Math.min(i, RAMP.length - 1)],
+      });
+    });
+
+    const never = tracked - present[present.length - 1].v;
+    if (never > 0) {
+      bands.push({
+        key: "never",
+        label: "Never purchased",
+        value: never,
+        share: never / tracked,
+        step: null,
+      });
+    }
+
+    return bands.length ? available(bands) : unavailable(NEEDS_CONSUMERS);
+  })();
+
   return {
+    consumerRecency: recency,
     customerCount: hasCustomers
       ? available(customers.length)
       : unavailable(NEEDS_CUSTOMERS),
@@ -531,6 +630,59 @@ export function platformBreakdown(snapshot: Snapshot): PlatformRow[] {
   return [...rows.values()]
     .filter((r) => r.customers > 0 || r.consumersTracked !== null)
     .sort((a, b) => b.mrrCents - a.mrrCents);
+}
+
+/**
+ * Rolls the monthly series into quarters or years.
+ *
+ * A bucket stays partial if ANY month in it is — a quarter one month into its
+ * run is every bit as incomplete as the month itself, and comparing it against
+ * finished quarters would understate it the same way.
+ */
+function rollUpMonths(
+  months: MonthRevenue[],
+  bucket: "quarter" | "year",
+): MonthRevenue[] {
+  const out = new Map<string, MonthRevenue>();
+  for (const m of months) {
+    const [y, mm] = m.month.split("-");
+    const key =
+      bucket === "year" ? y : `${y}-Q${Math.floor((Number(mm) - 1) / 3) + 1}`;
+    const cur = out.get(key) ?? {
+      month: key,
+      saasCents: 0,
+      usageCents: 0,
+      totalCents: 0,
+    };
+    cur.saasCents += m.saasCents;
+    cur.usageCents += m.usageCents;
+    cur.totalCents = cur.saasCents + cur.usageCents;
+    if (m.partial) cur.partial = true;
+    out.set(key, cur);
+  }
+  return [...out.values()].sort((a, b) => a.month.localeCompare(b.month));
+}
+
+/** "Q2" / "2026" for the axis. */
+function bucketShortLabel(key: string): string {
+  return key.includes("-Q") ? key.split("-")[1] : key;
+}
+
+/** "Q2 2026" / "2026" for tooltips and the table. */
+function bucketLongLabel(key: string): string {
+  if (!key.includes("-Q")) return key;
+  const [y, q] = key.split("-");
+  return `${q} ${y}`;
+}
+
+/** "Bought in the last 30 days" / "31–180 days ago" / "Over a year ago". */
+function bandLabel(from: string | null, to: string): string {
+  if (to === "ever") {
+    if (from === "365") return "Over a year ago";
+    return from ? `More than ${from} days ago` : "Ever";
+  }
+  if (from === null) return `Bought in the last ${to} days`;
+  return `${Number(from) + 1}–${to} days ago`;
 }
 
 /** Do the rows in view straddle a year boundary? Controls the axis label. */

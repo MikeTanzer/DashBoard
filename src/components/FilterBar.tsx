@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import type { Platform } from "@/lib/types";
-import { DEFAULT_RANGE, type RangeId } from "@/lib/range";
+import { DEFAULT_RANGE, defaultBucket, RANGES, type Grain, type RangeId } from "@/lib/range";
 import { PlatformLogo, hasPlatformLogo } from "./PlatformLogo";
 
 /**
@@ -22,6 +22,7 @@ export function FilterBar({
   range,
   from,
   to,
+  bucket,
 }: {
   platforms: Platform[];
   selected: string[];
@@ -30,6 +31,8 @@ export function FilterBar({
   /** Custom-range bounds, carried for the same reason. */
   from?: string;
   to?: string;
+  /** Bucket size, carried so changing platform doesn't reset the chart grain. */
+  bucket?: Grain;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -43,6 +46,12 @@ export function FilterBar({
     if (range === "custom" && from && to) {
       params.set("from", from);
       params.set("to", to);
+    }
+    // Only carry the bucket when it isn't what this window would pick anyway,
+    // so the URL stays short for the common case.
+    const spec = RANGES.find((r) => r.id === range);
+    if (bucket && spec && bucket !== defaultBucket(spec)) {
+      params.set("grain", bucket);
     }
     const qs = params.toString();
     startTransition(() => router.push(qs ? `/?${qs}` : "/", { scroll: false }));

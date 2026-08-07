@@ -258,6 +258,40 @@ body {
   --series-2: #ef4a63;
 }
 
+/* Map inset: the pie panel parked in the projection's empty lower-right. */
+.map-wrap {
+  position: relative;
+}
+
+.map-inset {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-1);
+  padding: 14px 16px;
+}
+
+/* Wide enough to sit beside the map: the panel takes its own column and the
+   map keeps the rest, so the two share the lower-right without the panel ever
+   covering a state. Overlaying it would hide Florida and the southeast. */
+@media (min-width: 1080px) {
+  .map-wrap {
+    display: flex;
+    align-items: flex-end;
+    gap: 20px;
+  }
+  .map-wrap > .map-figure {
+    flex: 1;
+    min-width: 0;
+  }
+  .map-inset {
+    width: 268px;
+    flex-shrink: 0;
+    margin-top: 0;
+    margin-bottom: 8px;
+  }
+}
+
 /* --- Type ------------------------------------------------------------------ */
 
 .display {

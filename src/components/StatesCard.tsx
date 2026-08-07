@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import type { StateCount } from "@/lib/metrics";
+import type { RecencyBand, StateCount } from "@/lib/metrics";
+import { ConsumerPie } from "./ConsumerPie";
 import { STATE_NAMES } from "@/lib/states";
 import {
   MAP_HEIGHT,
@@ -18,6 +19,8 @@ type View = "map" | "bars" | "table";
 interface Props {
   data: StateCount[];
   customersWithoutState: number;
+  /** Consumer recency, shown as an inset panel over the map's empty corner. */
+  recency?: RecencyBand[];
 }
 
 /**
@@ -83,7 +86,7 @@ function rampStep(i: number, count: number): number {
   return ramp[Math.min(i, ramp.length - 1)];
 }
 
-export function StatesCard({ data, customersWithoutState }: Props) {
+export function StatesCard({ data, customersWithoutState, recency }: Props) {
   const [view, setView] = useState<View>("map");
   const [hover, setHover] = useState<{
     x: number;
@@ -133,7 +136,30 @@ export function StatesCard({ data, customersWithoutState }: Props) {
 
       {view === "map" ? (
         <>
-          <Choropleth byCode={byCode} bin={bin} onHover={showTip} onLeave={() => setHover(null)} />
+          <div className="map-wrap">
+            <Choropleth
+              byCode={byCode}
+              bin={bin}
+              onHover={showTip}
+              onLeave={() => setHover(null)}
+            />
+            {recency?.length ? (
+              // Its own column beside the map, bottom-aligned, so it reads as
+              // the lower-right of the card without covering any state. Below
+              // ~1080px it drops under the map instead.
+              <aside className="map-inset" aria-label="Consumer recency">
+                <h3 className="text-[12px] font-bold mb-2">Consumer recency</h3>
+                <ConsumerPie bands={recency} inset />
+                <p
+                  className="text-[10px] mt-2 leading-snug"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Shoppers on our customers&apos; storefronts. Aggregate counts
+                  only.
+                </p>
+              </aside>
+            ) : null}
+          </div>
           <ScaleLegend bins={bins} />
         </>
       ) : view === "bars" ? (
@@ -208,7 +234,7 @@ function Choropleth({
   onLeave: () => void;
 }) {
   return (
-    <div className="mt-3 overflow-x-auto">
+    <div className="mt-3 overflow-x-auto map-figure">
       <svg
         viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
         width="100%"
