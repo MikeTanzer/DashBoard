@@ -258,37 +258,46 @@ body {
   --series-2: #ef4a63;
 }
 
-/* Map inset: the pie panel parked in the projection's empty lower-right. */
-.map-wrap {
-  position: relative;
+/* The states card is two columns: the chosen view on the left, and a fixed
+   right column holding the view toggle above the recency panel. The right
+   column lives outside the view switch so it doesn't shift when you change
+   between Map, Bars and Table. Below 1080px it stacks under the content. */
+.states-layout {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 16px;
+  margin-top: 12px;
 }
 
-.map-inset {
-  margin-top: 16px;
+.states-main {
+  min-width: 0;
+}
+
+.states-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recency-panel {
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--surface-1);
   padding: 14px 16px;
 }
 
-/* Wide enough to sit beside the map: the panel takes its own column and the
-   map keeps the rest, so the two share the lower-right without the panel ever
-   covering a state. Overlaying it would hide Florida and the southeast. */
 @media (min-width: 1080px) {
-  .map-wrap {
-    display: flex;
-    align-items: flex-end;
+  .states-layout {
+    flex-direction: row;
+    align-items: flex-start;
     gap: 20px;
   }
-  .map-wrap > .map-figure {
+  .states-main {
     flex: 1;
-    min-width: 0;
   }
-  .map-inset {
+  .states-side {
     width: 268px;
     flex-shrink: 0;
-    margin-top: 0;
-    margin-bottom: 8px;
   }
 }
 

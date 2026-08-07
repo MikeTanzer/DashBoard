@@ -120,53 +120,61 @@ export function StatesCard({ data, customersWithoutState, recency }: Props) {
 
   return (
     <section className="card p-6" ref={wrapRef} style={{ position: "relative" }}>
-      <header className="flex flex-wrap items-start justify-between gap-3 mb-1">
-        <div>
-          <h2 className="text-[15px] font-bold">Customers by state</h2>
-          <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
-            {data.length} state{data.length === 1 ? "" : "s"} with at least one
-            customer
-            {customersWithoutState > 0
-              ? ` · ${customersWithoutState} customer${customersWithoutState === 1 ? "" : "s"} missing a state`
-              : ""}
-          </p>
-        </div>
-        <ViewToggle view={view} onChange={setView} />
+      <header className="mb-1">
+        <h2 className="text-[15px] font-bold">Customers by state</h2>
+        <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+          {data.length} state{data.length === 1 ? "" : "s"} with at least one
+          customer
+          {customersWithoutState > 0
+            ? ` · ${customersWithoutState} customer${customersWithoutState === 1 ? "" : "s"} missing a state`
+            : ""}
+        </p>
       </header>
 
-      {view === "map" ? (
-        <>
-          <div className="map-wrap">
-            <Choropleth
-              byCode={byCode}
-              bin={bin}
-              onHover={showTip}
-              onLeave={() => setHover(null)}
-            />
-            {recency?.length ? (
-              // Its own column beside the map, bottom-aligned, so it reads as
-              // the lower-right of the card without covering any state. Below
-              // ~1080px it drops under the map instead.
-              <aside className="map-inset" aria-label="Consumer recency">
-                <h3 className="text-[12px] font-bold mb-2">Consumer recency</h3>
-                <ConsumerPie bands={recency} inset />
-                <p
-                  className="text-[10px] mt-2 leading-snug"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  Shoppers on our customers&apos; storefronts. Aggregate counts
-                  only.
-                </p>
-              </aside>
-            ) : null}
+      {/* Two columns. The right one — view toggle above the recency panel —
+          is rendered once, outside the view switch, so it holds its position
+          when you move between Map, Bars and Table. Putting the toggle in the
+          header and the panel inside the map branch made both of them move
+          (or vanish) as soon as the view changed. */}
+      <div className="states-layout">
+        <div className="states-main">
+          {view === "map" ? (
+            <>
+              <Choropleth
+                byCode={byCode}
+                bin={bin}
+                onHover={showTip}
+                onLeave={() => setHover(null)}
+              />
+              <ScaleLegend bins={bins} />
+            </>
+          ) : view === "bars" ? (
+            <Bars data={data} onHover={showTip} onLeave={() => setHover(null)} />
+          ) : (
+            <Table data={data} />
+          )}
+        </div>
+
+        <aside className="states-side">
+          <div className="flex justify-end">
+            <ViewToggle view={view} onChange={setView} />
           </div>
-          <ScaleLegend bins={bins} />
-        </>
-      ) : view === "bars" ? (
-        <Bars data={data} onHover={showTip} onLeave={() => setHover(null)} />
-      ) : (
-        <Table data={data} />
-      )}
+
+          {recency?.length ? (
+            <div className="recency-panel" aria-label="Consumer recency">
+              <h3 className="text-[12px] font-bold mb-2">Consumer recency</h3>
+              <ConsumerPie bands={recency} inset />
+              <p
+                className="text-[10px] mt-2 leading-snug"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Shoppers on our customers&apos; storefronts. Aggregate counts
+                only.
+              </p>
+            </div>
+          ) : null}
+        </aside>
+      </div>
 
       {hover && view !== "table" ? (
         <div
@@ -234,7 +242,7 @@ function Choropleth({
   onLeave: () => void;
 }) {
   return (
-    <div className="mt-3 overflow-x-auto map-figure">
+    <div className="overflow-x-auto">
       <svg
         viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
         width="100%"
