@@ -52,8 +52,12 @@ const worktree = mkdtempSync(path.join(tmpdir(), "pyrotree-pages-"));
 try {
   run("git", ["worktree", "add", "--detach", worktree]);
 
-  // Start from an empty tree so deleted files actually disappear from the branch.
-  run("git", ["-C", worktree, "checkout", "--orphan", BRANCH]);
+  // Start from an empty tree so deleted files actually disappear from the
+  // branch. The orphan branch gets a throwaway name: reusing BRANCH fails on
+  // every run after the first, because the local branch already exists. Only
+  // the push refspec below decides what lands on the remote.
+  const temp = `pages-publish-${process.pid}`;
+  run("git", ["-C", worktree, "checkout", "--orphan", temp]);
   run("git", ["-C", worktree, "reset", "--hard"]);
 
   cpSync(out, worktree, { recursive: true });
