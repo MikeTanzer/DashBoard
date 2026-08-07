@@ -63,6 +63,37 @@ selection so a filtered view is shareable.
 
 ---
 
+## Deploying to GitHub Pages
+
+`npm run deploy:pages` builds the static site and pushes it to the `gh-pages`
+branch, which Pages serves.
+
+Auto-deploy on every push is available too, but the workflow file has to be
+added by someone whose token carries the `workflow` scope — an OAuth app can't
+create `.github/workflows/` on your behalf. The file is ready at
+`docs/pages-workflow.yml`; move it to `.github/workflows/pages.yml`, push, and
+switch the Pages source to "GitHub Actions".
+
+## What a static host means
+
+The live site is a **static export**: `npm run build` bakes a snapshot into the
+bundle and every filter runs in the browser. Pages serves files and runs no
+server, which has one real consequence:
+
+> **Stripe, the platform database and the admin API cannot run.** They need a
+> server to call them per request. On Pages the numbers are whatever was in
+> `data/network.json` when the site was last built — demo data by default.
+
+Everything else works exactly as before: platform and time filters, custom date
+ranges, daily/monthly/quarterly/annual buckets, the map, and the charts. The
+connector code is untouched and still runs on any Node host.
+
+**To connect live data**, deploy the same repo to a Node host (Vercel, Fly, a
+container) and drop `output: "export"` from `next.config.ts`. Nothing else has
+to change.
+
+---
+
 ## Access
 
 **There is no login. Anyone who can reach the URL sees everything** — customer
@@ -76,11 +107,6 @@ it's a better place for it than a shared password in an env var.
 Two things are deliberately hardened for the no-login case, because the app can
 no longer assume its reader is trusted:
 
-- **`GET /api/snapshot` is off by default.** It returns every customer by name
-  with their revenue, which is a different proposition from an unauthenticated
-  dashboard. Set `PYROTREE_SNAPSHOT_API` to a long random secret (callers then
-  send `?key=…` or `Authorization: Bearer …`), or to `open` to allow anyone
-  with the URL. Unset, it 404s.
 - **Connector errors are redacted before display.** `pg` and `mysql2` quote the
   whole connection string back on failure, password included, and a failed
   Stripe call can echo the key. Those are masked on the way to the screen.
@@ -187,8 +213,7 @@ Force a refresh with `GET /api/snapshot?force=1` (needs `PYROTREE_SNAPSHOT_API`)
 ```
 src/
   app/
-    page.tsx              dashboard
-    api/snapshot          raw JSON, off unless PYROTREE_SNAPSHOT_API is set
+    page.tsx              static entry; bakes in the snapshot
   connectors/             one file per data source + the registry
     queries.ts            the SQL to edit for your schema
   lib/
@@ -196,9 +221,11 @@ src/
     types.ts              the normalized data model
     states.ts             USPS codes and name normalisation
     us-map.ts             GENERATED state geometry (npm run map)
-  components/             stat tiles, charts, filters
+  components/             Dashboard (client) + stat tiles, charts, filters
 scripts/generate-demo.mjs seeded demo data (monthly + daily)
 scripts/gen-us-map.mjs    regenerates us-map.ts from us-atlas
+scripts/ensure-demo.mjs   seeds demo data when data/network.json is absent
+scripts/build-snapshot.mjs bakes the snapshot for the static build
 ```
 
 ## Charts

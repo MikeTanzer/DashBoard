@@ -44,3 +44,9 @@ next-env.d.ts
 # Real network data never goes in the repo — it holds customer names and
 # revenue. Run `npm run demo` to regenerate the demo file after cloning.
 /data/network.json
+
+# Derived from data/network.json at build time.
+/src/generated/
+
+# Static export output
+/out/

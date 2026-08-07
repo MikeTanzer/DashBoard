@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { cookies } from "next/headers";
 import "./globals.css";
-import { THEME_COOKIE, readTheme } from "@/lib/theme";
 
 /**
  * Inter is the face webjoint.com uses. next/font self-hosts it at build time,
@@ -28,25 +26,14 @@ export const viewport: Viewport = {
 };
 
 /**
- * The theme is stamped on <html> by the server, from a cookie.
- *
- * The usual trick — an inline bootstrap script reading localStorage before
- * paint — doesn't work under React 19: inline scripts rendered as component
- * children aren't executed on the client, and mutating <html> ahead of
- * hydration desynchronises it. A cookie gives the same no-flash result with no
- * script, and the markup matches by construction.
+ * No server, so no cookie: ThemeToggle applies data-theme on the client from
+ * localStorage. suppressHydrationWarning covers the attribute it adds.
  */
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const theme = readTheme((await cookies()).get(THEME_COOKIE)?.value);
-
   return (
-    <html
-      lang="en"
-      data-theme={theme === "system" ? undefined : theme}
-      className={inter.variable}
-    >
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body>{children}</body>
     </html>
   );
