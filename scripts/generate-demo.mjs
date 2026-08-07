@@ -241,6 +241,45 @@ for (const platform of ["webjoint", "menu"]) {
 
 revenueDaily.sort((a, b) => a.date.localeCompare(b.date));
 
+// -- consumer rollups ---------------------------------------------------------
+/**
+ * Distinct purchasers per trailing window.
+ *
+ * Each longer window must contain the shorter ones — a consumer who bought in
+ * the last 7 days also bought in the last 30 — so these are built as a
+ * monotonically rising series, never drawn independently. `ever` is the ceiling.
+ * Growth flattens as the window widens, which is what repeat-purchase behaviour
+ * actually looks like: the 365-day figure is nowhere near 12x the 30-day one.
+ */
+function makeConsumerRollup(platform, tracked, rate30) {
+  const p30 = Math.round(tracked * rate30);
+  const purchasers = {
+    7: Math.round(p30 * 0.34),
+    30: p30,
+    90: Math.round(p30 * 1.94),
+    180: Math.round(p30 * 2.86),
+    365: Math.round(p30 * 3.71),
+  };
+  purchasers.ever = Math.round(purchasers[365] * 1.28);
+
+  // Cheap invariant checks — a rollup that isn't monotonic, or that claims more
+  // purchasers than tracked consumers, is a bug worth failing the build over.
+  const order = [7, 30, 90, 180, 365];
+  for (let i = 1; i < order.length; i++) {
+    if (purchasers[order[i]] < purchasers[order[i - 1]]) {
+      throw new Error(`${platform}: purchasers not monotonic at ${order[i]}d`);
+    }
+  }
+  if (purchasers.ever < purchasers[365]) {
+    throw new Error(`${platform}: "ever" below the 365-day figure`);
+  }
+  if (purchasers.ever > tracked) {
+    throw new Error(`${platform}: more purchasers (${purchasers.ever}) than tracked (${tracked})`);
+  }
+
+  return { platform, tracked, purchasers };
+}
+
 const payload = {
   demo: true,
   _comment:
@@ -251,18 +290,8 @@ const payload = {
   ],
   customers,
   consumers: [
-    {
-      platform: "webjoint",
-      tracked: 812_400,
-      purchased30d: 94_800,
-      purchased180d: 271_600,
-    },
-    {
-      platform: "menu",
-      tracked: 348_900,
-      purchased30d: 31_200,
-      purchased180d: 102_400,
-    },
+    makeConsumerRollup("webjoint", 812_400, 0.117),
+    makeConsumerRollup("menu", 348_900, 0.089),
   ],
   revenue,
   revenueDaily,

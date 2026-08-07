@@ -25,12 +25,26 @@
     }
   ],
 
+  "_consumers_comment": [
+    "`purchasers` is keyed by trailing window in days, plus \"ever\" for all-time.",
+    "The dashboard's time range picks the matching window. Send only the ones",
+    "you actually compute — a purchaser count can't be derived from a",
+    "neighbouring window, so any you omit report themselves as untracked",
+    "rather than borrowing another period's number.",
+    "The older purchased30d / purchased180d fields still work."
+  ],
   "consumers": [
     {
       "platform": "webjoint",
       "tracked": 0,
-      "purchased30d": 0,
-      "purchased180d": 0
+      "purchasers": {
+        "7": 0,
+        "30": 0,
+        "90": 0,
+        "180": 0,
+        "365": 0,
+        "ever": 0
+      }
     }
   ],
 

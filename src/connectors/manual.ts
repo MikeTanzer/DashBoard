@@ -11,6 +11,7 @@ import type {
   RevenuePoint,
 } from "@/lib/types";
 import { normalizeState } from "@/lib/states";
+import { toPurchasers } from "@/lib/types";
 
 /**
  * Reads data/network.json — the escape hatch for anything not yet automated.
@@ -24,7 +25,10 @@ interface ManualFile {
   demo?: boolean;
   platforms?: Platform[];
   customers?: Partial<CustomerRecord>[];
-  consumers?: ConsumerStats[];
+  consumers?: (Partial<ConsumerStats> & {
+    purchased30d?: number;
+    purchased180d?: number;
+  })[];
   revenue?: RevenuePoint[];
   revenueDaily?: RevenueDayPoint[];
 }
@@ -79,7 +83,11 @@ export const manualConnector: Connector = {
     );
     if (customers.length) provides.push("customers");
 
-    const consumers = parsed.consumers ?? [];
+    const consumers: ConsumerStats[] = (parsed.consumers ?? []).map((c) => ({
+      platform: c.platform ?? "unassigned",
+      tracked: c.tracked ?? 0,
+      purchasers: toPurchasers(c),
+    }));
     if (consumers.length) provides.push("consumers");
 
     const revenue = parsed.revenue ?? [];

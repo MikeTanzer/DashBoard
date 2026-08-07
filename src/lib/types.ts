@@ -43,10 +43,47 @@ export interface ConsumerStats {
   platform: PlatformId;
   /** Distinct consumers we have any record of. */
   tracked: number;
-  /** Distinct consumers with >= 1 purchase in the trailing 30 days. */
-  purchased30d: number;
-  /** Distinct consumers with >= 1 purchase in the trailing 180 days. */
-  purchased180d: number;
+  /**
+   * Distinct consumers with >= 1 purchase in a trailing window, keyed by the
+   * window in days ("7", "30", "90", "180", "365") plus "ever" for all-time.
+   *
+   * A map rather than fixed fields because the dashboard's time range is
+   * arbitrary and a purchaser count is NOT derivable from another window —
+   * you cannot infer 365-day purchasers from a 180-day figure, in either
+   * direction. Whatever the source computes is what can be shown; the rest
+   * reports itself as untracked.
+   */
+  purchasers: Record<string, number>;
+}
+
+/** Window keys the UI knows how to ask for. */
+export const CONSUMER_WINDOWS = ["7", "30", "90", "180", "365", "ever"] as const;
+export type ConsumerWindow = (typeof CONSUMER_WINDOWS)[number];
+
+export function consumerWindowLabel(w: string): string {
+  return w === "ever" ? "ever" : `last ${w} days`;
+}
+
+/**
+ * Normalizes whatever a source hands us into the map, accepting the older
+ * `purchased30d` / `purchased180d` shape so existing payloads keep working.
+ */
+export function toPurchasers(input: {
+  purchasers?: Record<string, number | undefined>;
+  purchased30d?: number;
+  purchased180d?: number;
+}): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(input.purchasers ?? {})) {
+    if (typeof v === "number" && Number.isFinite(v)) out[k] = v;
+  }
+  if (out["30"] === undefined && typeof input.purchased30d === "number") {
+    out["30"] = input.purchased30d;
+  }
+  if (out["180"] === undefined && typeof input.purchased180d === "number") {
+    out["180"] = input.purchased180d;
+  }
+  return out;
 }
 
 /** One month of recognized revenue, split by type. */

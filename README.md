@@ -49,9 +49,14 @@ automatically (invoices carry timestamps); the admin API can send a
 
 **Consumers** (shoppers on our customers' storefronts — aggregate counts only)
 - Consumers tracked
-- Purchased in the last 30 days
-- Purchased in the last 180 days
-- 30-day activation rate
+- Purchasers in the selected window — 7 / 30 / 90 / 180 / 365 days, or ever
+- Engagement funnel and activation rate
+
+Purchaser counts are **not derivable from one another** — 365-day purchasers
+aren't implied by the 180-day figure in either direction — so each window has to
+be computed by the source. The consumer query computes all of them in one pass;
+omit any column you can't afford and that range reports itself as untracked
+instead of showing a neighbouring period's number.
 
 Everything is scoped by the platform filter at the top, and the URL carries the
 selection so a filtered view is shareable.
@@ -130,8 +135,10 @@ PYROTREE_DB_URL=postgres://readonly@replica/...
 
 Then `npm i pg` (or `mysql2` / `mongodb`) and edit the query in
 `src/connectors/queries.ts` to match the real schema. The query must return one
-row per platform with the columns `platform`, `tracked`, `purchased_30d`,
-`purchased_180d`. **Point it at a read replica.**
+row per platform with the columns `platform`, `tracked`, and a `purchased_*`
+column per window you want selectable (`purchased_7d`, `_30d`, `_90d`, `_180d`,
+`_365d`, `purchased_ever`). Every window column is optional.
+**Point it at a read replica.**
 
 ### 4. Internal admin / billing API → anything
 

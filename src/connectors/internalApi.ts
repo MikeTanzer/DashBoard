@@ -9,6 +9,7 @@ import type {
   RevenuePoint,
 } from "@/lib/types";
 import { normalizeState } from "@/lib/states";
+import { toPurchasers } from "@/lib/types";
 
 /**
  * Internal admin / billing API connector.
@@ -33,11 +34,13 @@ import { normalizeState } from "@/lib/states";
  *       "mrrUsageCents": 21350,
  *       "startedAt": "2024-03-11"
  *     }],
+ *     // `purchasers` is keyed by trailing window in days, plus "ever".
+ *     // Send only the windows you compute; the rest report as untracked.
  *     "consumers": [{
  *       "platform": "webjoint",
  *       "tracked": 812400,
- *       "purchased30d": 96300,
- *       "purchased180d": 288100
+ *       "purchasers": { "7": 31200, "30": 96300, "90": 189400,
+ *                       "180": 288100, "365": 402700, "ever": 511900 }
  *     }],
  *     "revenue": [{
  *       "month": "2026-07",
@@ -59,7 +62,10 @@ import { normalizeState } from "@/lib/states";
 interface ApiPayload {
   platforms?: Platform[];
   customers?: Partial<CustomerRecord>[];
-  consumers?: Partial<ConsumerStats>[];
+  consumers?: (Partial<ConsumerStats> & {
+    purchased30d?: number;
+    purchased180d?: number;
+  })[];
   revenue?: Partial<RevenuePoint>[];
   revenueDaily?: Partial<RevenueDayPoint>[];
 }
@@ -118,8 +124,7 @@ export const internalApiConnector: Connector = {
     const consumers: ConsumerStats[] = (payload.consumers ?? []).map((c) => ({
       platform: c.platform ?? "unassigned",
       tracked: c.tracked ?? 0,
-      purchased30d: c.purchased30d ?? 0,
-      purchased180d: c.purchased180d ?? 0,
+      purchasers: toPurchasers(c),
     }));
     if (consumers.length) provides.push("consumers");
 

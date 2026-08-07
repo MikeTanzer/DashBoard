@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { THEME_COOKIE, readTheme } from "@/lib/theme";
-import { readRange } from "@/lib/range";
+import { readRange, windowPhrase } from "@/lib/range";
 import { getSnapshot } from "@/connectors";
 import { computeMetrics, platformBreakdown } from "@/lib/metrics";
 import {
@@ -116,7 +116,7 @@ export default async function DashboardPage({
             format={fullNumber}
             hint={
               m.newCustomers.available
-                ? `+${fullNumber(m.newCustomers.value)} new in the ${range.window}`
+                ? `+${fullNumber(m.newCustomers.value)} new ${windowPhrase(range)}`
                 : undefined
             }
           />
@@ -127,8 +127,8 @@ export default async function DashboardPage({
             hint={
               m.newStates.available
                 ? m.newStates.value > 0
-                  ? `+${m.newStates.value} entered in the ${range.window}`
-                  : `No new states in the ${range.window}`
+                  ? `+${m.newStates.value} entered ${windowPhrase(range)}`
+                  : `No new states ${windowPhrase(range)}`
                 : undefined
             }
           />
@@ -139,10 +139,15 @@ export default async function DashboardPage({
             format={compactNumber}
             hint="All time — the source keeps no history"
           />
-          {/* Purchase counts exist for exactly two windows, so this snaps to
-              whichever the range is closer to rather than interpolating. */}
+          {/* Asks the source for the window this range actually covers. A
+              purchaser count isn't derivable from a neighbouring window, so an
+              uncomputed one reports itself rather than borrowing another's. */}
           <StatTile
-            label={`Purchased in last ${m.consumerWindowDays} days`}
+            label={
+              m.consumerWindowLabel === "ever"
+                ? "Consumers who ever purchased"
+                : `Purchased in ${m.consumerWindowLabel}`
+            }
             metric={m.consumersPurchased}
             format={compactNumber}
             hint={

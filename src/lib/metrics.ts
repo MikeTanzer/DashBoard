@@ -6,7 +6,7 @@ import type {
   RevenuePoint,
   Snapshot,
 } from "./types";
-import { available, unavailable } from "./types";
+import { available, unavailable, consumerWindowLabel } from "./types";
 import { STATE_NAMES } from "./states";
 import { dayLabel, monthLabel } from "./format";
 import type { RangeSpec } from "./range";
@@ -92,9 +92,10 @@ export interface DashboardMetrics {
   newCustomers: Metric<number>;
   /** States that gained their first customer inside the window. */
   newStates: Metric<number>;
-  /** Consumer purchasers, on whichever fixed window fits the range. */
+  /** Consumer purchasers for the window this range asks for. */
   consumersPurchased: Metric<number>;
-  consumerWindowDays: 30 | 180;
+  /** Prose for that window: "last 90 days" / "ever". */
+  consumerWindowLabel: string;
 
   // Consumers
   consumersTracked: Metric<number>;
@@ -300,8 +301,22 @@ export function computeMetrics(
   // --- Consumers ------------------------------------------------------------
   const hasConsumers = consumers.length > 0;
   const tracked = sumOf(consumers, (c) => c.tracked);
-  const p30 = sumOf(consumers, (c) => c.purchased30d);
-  const p180 = sumOf(consumers, (c) => c.purchased180d);
+
+  /**
+   * Purchasers for one trailing window, summed across the in-scope platforms.
+   * Returns null unless EVERY platform in scope reports that window — a partial
+   * sum would silently undercount the network, which is worse than saying the
+   * window isn't computed.
+   */
+  const purchasersFor = (w: string): number | null => {
+    if (!consumers.length) return null;
+    if (!consumers.every((c) => typeof c.purchasers[w] === "number")) return null;
+    return consumers.reduce((a, c) => a + c.purchasers[w], 0);
+  };
+
+  const p30 = purchasersFor("30");
+  const p180 = purchasersFor("180");
+  const pWindow = purchasersFor(range.consumerWindow);
 
   return {
     customerCount: hasCustomers
@@ -381,13 +396,18 @@ export function computeMetrics(
     newCustomers,
     newStates,
 
-    // Consumer purchase counts exist for exactly two windows, defined by the
-    // source query. The range picks whichever is the honest match rather than
-    // interpolating a number nobody measured.
-    consumersPurchased: hasConsumers
-      ? available(range.consumerWindow === 30 ? p30 : p180)
-      : unavailable(NEEDS_CONSUMERS),
-    consumerWindowDays: range.consumerWindow,
+    // A purchaser count can't be derived from a neighbouring window, so when
+    // the source doesn't compute this one the tile says which column to add
+    // rather than quietly showing a different period's number.
+    consumersPurchased:
+      pWindow !== null
+        ? available(pWindow)
+        : unavailable(
+            hasConsumers
+              ? `No purchaser count for the ${consumerWindowLabel(range.consumerWindow)}. Add ${range.consumerWindow === "ever" ? "purchased_ever" : `purchased_${range.consumerWindow}d`} to the consumer query in src/connectors/queries.ts, or send it in the admin API's \`purchasers\` map.`
+              : NEEDS_CONSUMERS,
+          ),
+    consumerWindowLabel: consumerWindowLabel(range.consumerWindow),
 
     annualRunRate: hasCustomers
       ? available(totalCents * 12)
@@ -397,16 +417,14 @@ export function computeMetrics(
       ? available(tracked)
       : unavailable(NEEDS_CONSUMERS),
 
-    consumersPurchased30d: hasConsumers
-      ? available(p30)
-      : unavailable(NEEDS_CONSUMERS),
+    consumersPurchased30d:
+      p30 !== null ? available(p30) : unavailable(NEEDS_CONSUMERS),
 
-    consumersPurchased180d: hasConsumers
-      ? available(p180)
-      : unavailable(NEEDS_CONSUMERS),
+    consumersPurchased180d:
+      p180 !== null ? available(p180) : unavailable(NEEDS_CONSUMERS),
 
     consumerActivation30d:
-      hasConsumers && tracked > 0
+      p30 !== null && tracked > 0
         ? available(p30 / tracked)
         : unavailable(NEEDS_CONSUMERS),
   };
@@ -468,7 +486,7 @@ export function platformBreakdown(snapshot: Snapshot): PlatformRow[] {
     const row = rows.get(c.platform);
     if (!row) continue;
     row.consumersTracked = c.tracked;
-    row.consumers30d = c.purchased30d;
+    row.consumers30d = c.purchasers["30"] ?? null;
   }
 
   return [...rows.values()]

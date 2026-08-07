@@ -191,12 +191,21 @@ export const databaseConnector: Connector = {
     const rows =
       e === "mongodb" ? await queryMongo() : await query(CONSUMERS_SQL);
 
-    const consumers: ConsumerStats[] = rows.map((r) => ({
-      platform: str(r.platform) || "unassigned",
-      tracked: num(r.tracked),
-      purchased30d: num(r.purchased_30d),
-      purchased180d: num(r.purchased_180d),
-    }));
+    // Each window column is optional — absent ones stay out of the map so the
+    // dashboard can distinguish "zero purchasers" from "not computed".
+    const consumers: ConsumerStats[] = rows.map((r) => {
+      const purchasers: Record<string, number> = {};
+      for (const w of ["7", "30", "90", "180", "365"]) {
+        const v = r[`purchased_${w}d`];
+        if (v != null) purchasers[w] = num(v);
+      }
+      if (r.purchased_ever != null) purchasers.ever = num(r.purchased_ever);
+      return {
+        platform: str(r.platform) || "unassigned",
+        tracked: num(r.tracked),
+        purchasers,
+      };
+    });
     if (consumers.length) provides.push("consumers");
 
     let customers: CustomerRecord[] | undefined;
