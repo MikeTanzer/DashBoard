@@ -5,6 +5,7 @@ import type {
   CustomerRecord,
   DataDomain,
   PlatformId,
+  CashPosition,
   RevenueDayPoint,
   RevenuePoint,
 } from "@/lib/types";
@@ -70,6 +71,11 @@ interface StripeSubscription {
   customer: StripeCustomer | string;
   metadata?: Record<string, string>;
   items: StripeList<{ id: string; quantity?: number; price: StripePrice }>;
+}
+
+interface StripeBalance {
+  available: { amount: number; currency: string }[];
+  pending: { amount: number; currency: string }[];
 }
 
 interface StripeInvoice {
@@ -172,7 +178,7 @@ export const stripeConnector: Connector = {
   isConfigured: () => key().startsWith("sk_") || key().startsWith("rk_"),
 
   missing: () =>
-    "Set STRIPE_SECRET_KEY (a restricted key with read access to Customers, Subscriptions and Invoices is enough).",
+    "Set STRIPE_SECRET_KEY (a restricted key with read access to Customers, Subscriptions, Invoices and Balance).",
 
   async fetch(): Promise<ConnectorResult> {
     const usageProducts = usageProductIds();
@@ -326,6 +332,33 @@ export const stripeConnector: Connector = {
       );
     }
 
+    // --- Cash held at Stripe --------------------------------------------------
+    // Only the Stripe balance — settled money in a bank account is invisible
+    // from here, so this is a floor on cash, not the whole picture. The label
+    // says so rather than implying it's the company total.
+    let cash: CashPosition[] = [];
+    try {
+      const bal = await stripeGet<StripeBalance>("/v1/balance", {});
+      const usd = (rows: { amount: number; currency: string }[]) =>
+        (rows ?? [])
+          .filter((r) => r.currency.toLowerCase() === "usd")
+          .reduce((a, r) => a + r.amount, 0);
+      cash = [
+        {
+          label: "Stripe balance (available + pending)",
+          amountCents: usd(bal.available) + usd(bal.pending),
+          asOf: new Date().toISOString().slice(0, 10),
+        },
+      ];
+      provides.push("cash");
+    } catch (err) {
+      // A restricted key without Balance access shouldn't sink the connector —
+      // every other metric it produced is still good.
+      warnings.push(
+        `Stripe balance unavailable (${err instanceof Error ? err.message.slice(0, 60) : "error"}); add Balance read access to the key`,
+      );
+    }
+
     const detail =
       `${customers.length} active customers, ${revenue.length} month/platform revenue buckets from ${invoices.length} paid invoices.` +
       (warnings.length ? ` Caveats: ${warnings.join("; ")}.` : "");
@@ -334,6 +367,7 @@ export const stripeConnector: Connector = {
       customers,
       revenue,
       revenueDaily,
+      cash,
       status: {
         id: "stripe",
         label: "Stripe",

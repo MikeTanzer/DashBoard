@@ -119,6 +119,11 @@ export interface DashboardMetrics {
   /** Exclusive recency slices of the consumer base. */
   consumerRecency: Metric<RecencyBand[]>;
 
+  /** Total cash across reported accounts. A balance — the range doesn't move it. */
+  cashOnHand: Metric<number>;
+  /** How many months of current burn that covers, when burn is knowable. */
+  cashAsOf: string | null;
+
   // Consumers
   consumersTracked: Metric<number>;
   consumersPurchased30d: Metric<number>;
@@ -132,6 +137,8 @@ const NEEDS_STATE =
   "Customer records exist, but none carry a state. Add an address state in Stripe, or a `state` field on each customer.";
 const NEEDS_CONSUMERS =
   "Connect the platform database (consumer rollup query) or have the internal admin API return a `consumers` array.";
+const NEEDS_CASH =
+  "Cash on hand is a bank balance, not something derivable from revenue or MRR. Supply it via `cash` in data/network.json or from the admin API, or set STRIPE_SECRET_KEY to pull the Stripe balance (Stripe covers money held there, not your operating account).";
 const NEEDS_DAILY_REVENUE =
   "Day-level revenue needs a source with timestamped transactions. Stripe supplies it automatically once STRIPE_SECRET_KEY is set; the admin API can send a `revenueDaily` array. Monthly totals can't be split into days after the fact.";
 const NEEDS_REVENUE_HISTORY =
@@ -455,7 +462,28 @@ export function computeMetrics(
     return bands.length ? available(bands) : unavailable(NEEDS_CONSUMERS);
   })();
 
+  // --- Cash ------------------------------------------------------------------
+  // Deliberately NOT filtered by platform or range: a bank balance belongs to
+  // the company, not to a product line or a date window.
+  const cashTotal = snapshot.cash.reduce((a, c) => a + c.amountCents, 0);
+  const cashDates = snapshot.cash
+    .map((c) => c.asOf)
+    .filter((d): d is string => Boolean(d))
+    .sort();
+  // Oldest date wins: the total is only as current as its stalest component.
+  const cashAsOf = cashDates.length ? cashDates[0] : null;
+
   return {
+    cashOnHand: snapshot.cash.length
+      ? available(
+          cashTotal,
+          snapshot.cash.length === 1
+            ? snapshot.cash[0].label
+            : `${snapshot.cash.length} accounts`,
+        )
+      : unavailable(NEEDS_CASH),
+    cashAsOf,
+
     consumerRecency: recency,
     customerCount: hasCustomers
       ? available(customers.length)

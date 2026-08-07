@@ -5,6 +5,7 @@ import { stripeConnector } from "./stripe";
 import { databaseConnector } from "./database";
 import { internalApiConnector } from "./internalApi";
 import type {
+  CashPosition,
   ConsumerStats,
   CustomerRecord,
   Platform,
@@ -49,6 +50,9 @@ async function buildSnapshot(): Promise<Snapshot> {
   const consumers = new Map<string, ConsumerStats>();
   const revenue = new Map<string, RevenuePoint>();
   const revenueDaily = new Map<string, RevenueDayPoint>();
+  // Keyed by account label so a later source refreshes a balance rather than
+  // double-counting the same account.
+  const cash = new Map<string, CashPosition>();
   const platforms = new Map<string, Platform>(
     DEFAULT_PLATFORMS.map((p) => [p.id, p]),
   );
@@ -61,6 +65,7 @@ async function buildSnapshot(): Promise<Snapshot> {
       revenue.set(`${p.month}|${p.platform}`, p);
     for (const p of r.revenueDaily ?? [])
       revenueDaily.set(`${p.date}|${p.platform}`, p);
+    for (const c of r.cash ?? []) cash.set(c.label, c);
   }
 
   // Any platform referenced by data but never declared still gets a name.
@@ -89,6 +94,7 @@ async function buildSnapshot(): Promise<Snapshot> {
     revenueDaily: [...revenueDaily.values()].sort((a, b) =>
       a.date.localeCompare(b.date),
     ),
+    cash: [...cash.values()],
     sources: results.map((r) => r.status),
   };
 }

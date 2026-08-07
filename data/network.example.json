@@ -57,6 +57,18 @@
     }
   ],
 
+  "_cash_comment": [
+    "Cash on hand. A bank balance — it is NOT derived from revenue or MRR, and",
+    "it does not move with the dashboard's time range. List one entry per",
+    "account; the tile sums them and shows the OLDEST asOf date, since the total",
+    "is only as current as its stalest part.",
+    "Stripe can supply its own balance automatically; your operating account",
+    "has to come from here or the admin API."
+  ],
+  "cash": [
+    { "label": "Operating account", "amountCents": 0, "asOf": "2026-08-07" }
+  ],
+
   "_revenueDaily_comment": [
     "Optional. Powers the 1W and 1M ranges on the revenue chart.",
     "Only include it if you genuinely have day-level figures — the dashboard",

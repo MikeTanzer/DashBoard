@@ -7,6 +7,7 @@ import type {
   CustomerRecord,
   DataDomain,
   Platform,
+  CashPosition,
   RevenueDayPoint,
   RevenuePoint,
 } from "@/lib/types";
@@ -31,6 +32,7 @@ interface ManualFile {
   })[];
   revenue?: RevenuePoint[];
   revenueDaily?: RevenueDayPoint[];
+  cash?: CashPosition[];
 }
 
 function filePath(): string {
@@ -95,6 +97,11 @@ export const manualConnector: Connector = {
     const revenueDaily = parsed.revenueDaily ?? [];
     if (revenue.length || revenueDaily.length) provides.push("revenue");
 
+    const cash = (parsed.cash ?? []).filter(
+      (c) => c && typeof c.amountCents === "number" && c.label,
+    );
+    if (cash.length) provides.push("cash");
+
     const summary = [
       customers.length && `${customers.length} customers`,
       consumers.length && `${consumers.length} platform consumer rollups`,
@@ -109,6 +116,7 @@ export const manualConnector: Connector = {
       consumers,
       revenue,
       revenueDaily,
+      cash,
       platforms: parsed.platforms,
       status: {
         id: "manual",

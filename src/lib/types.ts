@@ -117,6 +117,23 @@ export interface RevenueDayPoint {
   usageCents: number;
 }
 
+/**
+ * A cash balance in one account, at a point in time.
+ *
+ * Cash on hand is a balance, not a flow — it can't be derived from revenue,
+ * MRR or anything else already here, and it does NOT move with the dashboard's
+ * time range any more than a bank balance changes because you looked at a
+ * different quarter. It has to be reported by something that can see an
+ * account.
+ */
+export interface CashPosition {
+  /** Which account: "Stripe balance", "Operating account", "Reserve". */
+  label: string;
+  amountCents: number;
+  /** ISO date the balance was observed. Staleness matters for a balance. */
+  asOf?: string;
+}
+
 export type SourceId = "manual" | "stripe" | "database" | "internal-api";
 
 export type SourceState = "ok" | "not_configured" | "error" | "partial";
@@ -134,13 +151,14 @@ export interface SourceStatus {
 }
 
 /** The four independent things a connector can supply. */
-export type DataDomain = "customers" | "consumers" | "revenue";
+export type DataDomain = "customers" | "consumers" | "revenue" | "cash";
 
 export interface ConnectorResult {
   customers?: CustomerRecord[];
   consumers?: ConsumerStats[];
   revenue?: RevenuePoint[];
   revenueDaily?: RevenueDayPoint[];
+  cash?: CashPosition[];
   platforms?: Platform[];
   status: SourceStatus;
 }
@@ -154,6 +172,7 @@ export interface Snapshot {
   consumers: ConsumerStats[];
   revenue: RevenuePoint[];
   revenueDaily: RevenueDayPoint[];
+  cash: CashPosition[];
   sources: SourceStatus[];
 }
 

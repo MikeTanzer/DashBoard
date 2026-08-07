@@ -207,11 +207,20 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             metric={m.avgUsagePerCustomer}
             format={(v) => `${money(v)}/mo`}
           />
+          {/* A balance, not a flow: it doesn't move with the time range, so no
+              window is named here. The as-of date is the honest caveat — a
+              stale balance looks identical to a current one. */}
           <StatTile
-            label="Revenue change"
-            metric={m.revenueChange}
-            format={(v) => `${v >= 0 ? "+" : ""}${percent(v, 1)}`}
-            hint={`Complete periods only · vs the ${range.window.replace("last ", "")} before`}
+            label="Cash on hand"
+            metric={m.cashOnHand}
+            format={(v) => money(v)}
+            hint={
+              m.cashOnHand.available
+                ? m.cashAsOf
+                  ? `As of ${m.cashAsOf}`
+                  : "As-of date not reported"
+                : undefined
+            }
           />
         </div>
 

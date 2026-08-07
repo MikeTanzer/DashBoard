@@ -5,6 +5,7 @@ import type {
   CustomerRecord,
   DataDomain,
   Platform,
+  CashPosition,
   RevenueDayPoint,
   RevenuePoint,
 } from "@/lib/types";
@@ -68,6 +69,7 @@ interface ApiPayload {
   })[];
   revenue?: Partial<RevenuePoint>[];
   revenueDaily?: Partial<RevenueDayPoint>[];
+  cash?: CashPosition[];
 }
 
 export const internalApiConnector: Connector = {
@@ -147,6 +149,11 @@ export const internalApiConnector: Connector = {
       }));
     if (revenue.length || revenueDaily.length) provides.push("revenue");
 
+    const cash = (payload.cash ?? []).filter(
+      (c) => c && typeof c.amountCents === "number" && c.label,
+    );
+    if (cash.length) provides.push("cash");
+
     const summary = [
       customers.length && `${customers.length} customers`,
       consumers.length && `${consumers.length} platform consumer rollups`,
@@ -161,6 +168,7 @@ export const internalApiConnector: Connector = {
       consumers,
       revenue,
       revenueDaily,
+      cash,
       platforms: payload.platforms,
       status: {
         id: "internal-api",

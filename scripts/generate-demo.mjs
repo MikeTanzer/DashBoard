@@ -319,6 +319,20 @@ const payload = {
   ],
   revenue,
   revenueDaily,
+  // Cash is a balance reported by a bank or Stripe, never derived from the
+  // revenue above — these are two independent figures and are meant to be.
+  cash: [
+    {
+      label: "Operating account",
+      amountCents: 1_842_000_00,
+      asOf: TODAY.toISOString().slice(0, 10),
+    },
+    {
+      label: "Stripe balance (available + pending)",
+      amountCents: 214_500_00,
+      asOf: TODAY.toISOString().slice(0, 10),
+    },
+  ],
 };
 
 const out = path.join(process.cwd(), "data", "network.json");

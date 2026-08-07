@@ -63,6 +63,9 @@ const snapshot = {
   consumers,
   revenue: raw.revenue ?? [],
   revenueDaily: raw.revenueDaily ?? [],
+  cash: (raw.cash ?? []).filter(
+    (c) => c && typeof c.amountCents === "number" && c.label,
+  ),
   sources: [
     {
       id: "manual",
@@ -72,7 +75,7 @@ const snapshot = {
         `Static build — these numbers were fixed when the site was built, not fetched live. ` +
         `${customers.length} customers, ${consumers.length} platform consumer rollups, ` +
         `${(raw.revenue ?? []).length} revenue months, ${(raw.revenueDaily ?? []).length} revenue days.`,
-      provides: ["customers", "consumers", "revenue"],
+      provides: ["customers", "consumers", "revenue", "cash"],
       fetchedAt: new Date().toISOString(),
       durationMs: 0,
     },

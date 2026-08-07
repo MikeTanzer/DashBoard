@@ -47,6 +47,14 @@ those ranges say what's needed instead of guessing. Stripe supplies them
 automatically (invoices carry timestamps); the admin API can send a
 `revenueDaily` array; a hand-maintained file usually can't and doesn't have to.
 
+**Cash**
+- Cash on hand, summed across reported accounts, with an as-of date
+
+A balance, not a flow: it can't be derived from revenue or MRR and it doesn't
+move with the time range. Stripe supplies its own balance once connected — that
+covers money held at Stripe, not your operating account, which has to come from
+`cash` in `data/network.json` or from the admin API.
+
 **Consumers** (shoppers on our customers' storefronts — aggregate counts only)
 - Consumers tracked
 - Purchasers in the selected window — 7 / 30 / 90 / 180 / 365 days, or ever
