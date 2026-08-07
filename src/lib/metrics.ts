@@ -16,6 +16,8 @@ export interface StateCount {
   name: string;
   customers: number;
   mrrCents: number;
+  /** Tracked consumers in this state — null when no source breaks them down. */
+  consumers: number | null;
 }
 
 export interface MonthRevenue {
@@ -150,11 +152,28 @@ export function computeMetrics(
       name: STATE_NAMES[c.state] ?? c.state,
       customers: 0,
       mrrCents: 0,
+      consumers: null as number | null,
     };
     entry.customers++;
     entry.mrrCents += c.mrrSaasCents + c.mrrUsageCents;
     byState.set(c.state, entry);
   }
+  // Per-state consumer counts, if any source breaks them down that way.
+  // Summed across the in-scope platforms; a state absent from every map stays
+  // null rather than becoming a zero we never measured.
+  const consumersByState = new Map<string, number>();
+  for (const c of consumers) {
+    for (const [code, n] of Object.entries(c.consumersByState ?? {})) {
+      if (typeof n === "number" && Number.isFinite(n)) {
+        consumersByState.set(code, (consumersByState.get(code) ?? 0) + n);
+      }
+    }
+  }
+  for (const entry of byState.values()) {
+    const n = consumersByState.get(entry.code);
+    if (n !== undefined) entry.consumers = n;
+  }
+
   const stateList = [...byState.values()].sort(
     (a, b) => b.customers - a.customers || a.name.localeCompare(b.name),
   );
@@ -218,8 +237,19 @@ export function computeMetrics(
   const source: (MonthRevenue | DayRevenue)[] = dayGrain ? days : months;
   const dailyMissing = dayGrain && days.length === 0;
 
-  const take = range.count === Infinity ? source.length : range.count;
-  const windowRows = source.slice(-take);
+  // A custom range is bounded by explicit dates; the presets by a trailing
+  // count. Both end up as one contiguous slice, so everything downstream is
+  // identical either way.
+  const inCustom = (r: MonthRevenue | DayRevenue): boolean => {
+    if (!range.from || !range.to) return true;
+    const key = "date" in r ? r.date : r.month;
+    // Month keys compare against the month portion of the bounds.
+    return key >= range.from.slice(0, key.length) && key <= range.to.slice(0, key.length);
+  };
+
+  const bounded = range.from && range.to ? source.filter(inCustom) : source;
+  const take = range.count === Infinity ? bounded.length : range.count;
+  const windowRows = bounded.slice(-take);
 
   const toBar = (r: MonthRevenue | DayRevenue): Bar => {
     const isDay = "date" in r;
@@ -249,7 +279,12 @@ export function computeMetrics(
    * from both sides and compares equal numbers of finished periods.
    */
   const completeRows = source.filter((r) => !r.partial);
-  const cmpTake = range.count === Infinity ? completeRows.length : range.count;
+  const cmpTake =
+    range.from && range.to
+      ? bounded.filter((r) => !r.partial).length
+      : range.count === Infinity
+        ? completeRows.length
+        : range.count;
   const cmpWindow = completeRows.slice(-cmpTake);
   const cmpPrior = completeRows.slice(-(cmpTake * 2), -cmpTake);
   const cmpWindowSum = sumBy(cmpWindow, (r) => r.totalCents);
@@ -267,15 +302,17 @@ export function computeMetrics(
   // Exact: `startedAt` is the first payment date. Note this is arrivals, not
   // net growth — no source gives us cancellation dates yet, so churn can't be
   // subtracted and a "customers as of date X" series would only ever rise.
-  const windowStart =
-    range.days === Infinity
+  const windowStart = range.from
+    ? range.from
+    : range.days === Infinity
       ? "0000-00-00"
-      : new Date(Date.now() - range.days * 86_400_000)
-          .toISOString()
-          .slice(0, 10);
+      : new Date(Date.now() - range.days * 86_400_000).toISOString().slice(0, 10);
+  const windowEnd = range.to ?? "9999-12-31";
 
   const datedCustomers = customers.filter((c) => c.startedAt);
-  const arrived = datedCustomers.filter((c) => c.startedAt! >= windowStart);
+  const arrived = datedCustomers.filter(
+    (c) => c.startedAt! >= windowStart && c.startedAt! <= windowEnd,
+  );
 
   const newCustomers = datedCustomers.length
     ? available(arrived.length)
@@ -292,7 +329,9 @@ export function computeMetrics(
   }
   const newStates = datedCustomers.length
     ? available(
-        [...firstSeen.values()].filter((d) => d >= windowStart).length,
+        [...firstSeen.values()].filter(
+          (d) => d >= windowStart && d <= windowEnd,
+        ).length,
       )
     : unavailable(
         "Needs a start date per customer, to know when a state was first entered.",

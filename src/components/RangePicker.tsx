@@ -1,7 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
 import { DEFAULT_RANGE, RANGES, type RangeId } from "@/lib/range";
 
 /**
@@ -13,47 +13,148 @@ import { DEFAULT_RANGE, RANGES, type RangeId } from "@/lib/range";
 export function RangePicker({
   range,
   platform,
+  from,
+  to,
 }: {
   range: RangeId;
   platform: string[];
+  from?: string;
+  to?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const [draftFrom, setDraftFrom] = useState(from ?? "");
+  const [draftTo, setDraftTo] = useState(to ?? today);
+  const [error, setError] = useState<string | null>(null);
+
+  // Click-outside and Escape both close the popover.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!popRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const push = (params: URLSearchParams) => {
+    const qs = params.toString();
+    startTransition(() => router.push(qs ? `/?${qs}` : "/", { scroll: false }));
+  };
 
   const go = (next: RangeId) => {
     const params = new URLSearchParams();
     if (platform.length) params.set("platform", platform.join(","));
     if (next !== DEFAULT_RANGE) params.set("range", next);
-    const qs = params.toString();
-    startTransition(() => router.push(qs ? `/?${qs}` : "/", { scroll: false }));
+    setOpen(false);
+    push(params);
+  };
+
+  const applyCustom = () => {
+    if (!draftFrom || !draftTo) return setError("Pick both dates.");
+    if (draftFrom > draftTo) return setError("Start date is after the end date.");
+    if (draftTo > today) return setError("The end date is in the future.");
+
+    setError(null);
+    const params = new URLSearchParams();
+    if (platform.length) params.set("platform", platform.join(","));
+    params.set("range", "custom");
+    params.set("from", draftFrom);
+    params.set("to", draftTo);
+    setOpen(false);
+    push(params);
   };
 
   return (
     <div
-      className="flex rounded-lg overflow-hidden"
-      role="group"
-      aria-label="Time range"
-      style={{
-        border: "1px solid var(--border)",
-        opacity: pending ? 0.6 : 1,
-        transition: "opacity 120ms",
-      }}
+      className="flex items-center gap-2"
+      style={{ opacity: pending ? 0.6 : 1, transition: "opacity 120ms" }}
     >
-      {RANGES.map((r) => (
+      <div className="seg" role="group" aria-label="Time range">
+        {RANGES.map((r) => (
+          <button
+            key={r.id}
+            onClick={() => go(r.id)}
+            aria-pressed={range === r.id}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="relative" ref={popRef}>
         <button
-          key={r.id}
-          onClick={() => go(r.id)}
-          aria-pressed={range === r.id}
-          className="px-3 py-1.5 text-xs font-medium"
-          style={{
-            background: range === r.id ? "var(--surface-2)" : "transparent",
-            color:
-              range === r.id ? "var(--text-primary)" : "var(--text-secondary)",
-          }}
+          className="seg-solo"
+          aria-pressed={range === "custom"}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          onClick={() => setOpen((o) => !o)}
         >
-          {r.label}
+          {range === "custom" && from && to ? `${from} → ${to}` : "Custom"}
         </button>
-      ))}
+
+        {open ? (
+          <div className="date-pop" role="dialog" aria-label="Custom time range">
+            <div className="flex gap-3">
+              <label className="flex flex-col gap-1.5 flex-1">
+                <span className="eyebrow">From</span>
+                <input
+                  type="date"
+                  value={draftFrom}
+                  max={draftTo || today}
+                  onChange={(e) => setDraftFrom(e.target.value)}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 flex-1">
+                <span className="eyebrow">To</span>
+                <input
+                  type="date"
+                  value={draftTo}
+                  min={draftFrom || undefined}
+                  max={today}
+                  onChange={(e) => setDraftTo(e.target.value)}
+                />
+              </label>
+            </div>
+
+            {error ? (
+              <p
+                className="text-xs mt-2.5"
+                style={{ color: "var(--status-critical)" }}
+              >
+                {error}
+              </p>
+            ) : (
+              <p
+                className="text-[11px] mt-2.5"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Spans under ~10 weeks chart by day, longer ones by month.
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 mt-3">
+              <button className="btn-quiet" onClick={() => setOpen(false)}>
+                Cancel
+              </button>
+              <button className="btn-primary" onClick={applyCustom}>
+                Apply
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

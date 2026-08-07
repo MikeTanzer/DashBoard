@@ -24,10 +24,15 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ platform?: string; range?: string }>;
+  searchParams: Promise<{
+    platform?: string;
+    range?: string;
+    from?: string;
+    to?: string;
+  }>;
 }) {
-  const { platform, range: rangeParam } = await searchParams;
-  const range = readRange(rangeParam);
+  const { platform, range: rangeParam, from, to } = await searchParams;
+  const range = readRange(rangeParam, from, to);
   const theme = readTheme((await cookies()).get(THEME_COOKIE)?.value);
 
   const snapshot = await getSnapshot();
@@ -43,31 +48,36 @@ export default async function DashboardPage({
           .join(" + ");
 
   return (
-    <main className="min-h-dvh">
-      <div className="mx-auto max-w-[1180px] px-5 py-6 sm:px-8 sm:py-8">
-        {/* Header ------------------------------------------------------- */}
-        <header className="flex flex-wrap items-center justify-between gap-4 mb-5">
-          <div className="flex items-center gap-2.5">
-            <Logo size={30} />
+    <div className="min-h-dvh">
+      {/* Navy bar, full bleed — the brand's loudest gesture, straight off
+          webjoint.com's nav. Present in both themes, not just dark. --------- */}
+      <div className="topbar">
+        <div className="shell flex flex-wrap items-center justify-between gap-4 py-4">
+          <div className="flex items-center gap-3">
+            <Logo size={34} />
             <div>
-              <h1 className="font-semibold leading-tight">Pyrotree</h1>
-              <p
-                className="text-xs leading-tight"
-                style={{ color: "var(--text-muted)" }}
+              <h1
+                className="text-[15px] font-bold leading-tight"
+                style={{ color: "#fff", letterSpacing: "-0.02em" }}
               >
+                Pyrotree
+              </h1>
+              <p className="text-[11px] leading-tight muted">
                 Network Dashboard
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] muted hidden sm:inline">
               Updated {utcStamp(snapshot.generatedAt)}
             </span>
             <ThemeToggle initial={theme} />
           </div>
-        </header>
+        </div>
+      </div>
 
+      <main className="shell py-7 sm:py-9">
         {snapshot.demo ? <DemoBanner /> : null}
 
         {/* One control row, scoping everything below --------------------- */}
@@ -76,8 +86,15 @@ export default async function DashboardPage({
             platforms={snapshot.platforms}
             selected={selected}
             range={range.id}
+            from={range.from}
+            to={range.to}
           />
-          <RangePicker range={range.id} platform={selected} />
+          <RangePicker
+            range={range.id}
+            platform={selected}
+            from={range.from}
+            to={range.to}
+          />
         </div>
 
         {/* Headline figure and the history behind it, in one card --------- */}
@@ -200,10 +217,10 @@ export default async function DashboardPage({
         </div>
 
         {/* Consumer engagement -------------------------------------------- */}
-        <section className="card p-5 mb-4">
-          <h2 className="text-base font-semibold">Consumer engagement</h2>
+        <section className="card p-6 mb-4">
+          <h2 className="text-[15px] font-bold">Consumer engagement</h2>
           <p
-            className="text-xs mt-0.5 mb-4"
+            className="text-[12.5px] mt-1 mb-5"
             style={{ color: "var(--text-secondary)" }}
           >
             Shoppers on our customers&apos; storefronts — aggregate counts only,
@@ -230,8 +247,8 @@ export default async function DashboardPage({
 
         {/* Platform breakdown ---------------------------------------------- */}
         {platforms.length ? (
-          <section className="card p-5 mb-4">
-            <h2 className="text-base font-semibold mb-3">Platforms</h2>
+          <section className="card p-6 mb-4">
+            <h2 className="text-[15px] font-bold mb-4">Platforms</h2>
             <div className="overflow-x-auto">
               <table className="dataview">
                 <thead>
@@ -276,13 +293,13 @@ export default async function DashboardPage({
         <SourcesPanel sources={snapshot.sources} />
 
         <footer
-          className="text-xs mt-6 text-center"
+          className="text-xs mt-8 text-center"
           style={{ color: "var(--text-muted)" }}
         >
           Pyrotree · generated {utcStamp(snapshot.generatedAt)}
         </footer>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
 
@@ -291,25 +308,29 @@ export default async function DashboardPage({
 function DemoBanner() {
   return (
     <div
-      className="mb-5 rounded-lg px-4 py-3 flex items-start gap-2.5"
+      className="mb-6 rounded-2xl px-5 py-4 flex items-start gap-3"
       style={{
-        background: "color-mix(in srgb, var(--status-warning) 14%, transparent)",
-        border: "1px solid var(--status-warning)",
+        background: "color-mix(in srgb, var(--status-warning) 12%, var(--surface-1))",
+        border: "1px solid color-mix(in srgb, var(--status-warning) 45%, transparent)",
       }}
     >
       <span
         aria-hidden="true"
+        className="mt-[2px] shrink-0"
         style={{ color: "var(--status-warning)" }}
-        className="text-sm mt-[1px]"
       >
-        ▲
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M8 4.4v4.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <circle cx="8" cy="11.4" r="1" fill="currentColor" />
+        </svg>
       </span>
-      <div className="text-sm">
+      <div className="text-[13.5px] leading-relaxed">
         <strong>Demo data.</strong>{" "}
         <span style={{ color: "var(--text-secondary)" }}>
-          These numbers come from <code>data/network.json</code>, which has{" "}
-          <code>&quot;demo&quot;: true</code>. Connect a source or replace that
-          file with real records, and this banner disappears.
+          These numbers come from <code className="font-mono text-[12.5px]">data/network.json</code>,
+          which has <code className="font-mono text-[12.5px]">&quot;demo&quot;: true</code>. Connect a
+          source or replace that file with real records, and this banner disappears.
         </span>
       </div>
     </div>

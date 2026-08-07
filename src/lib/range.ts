@@ -26,9 +26,12 @@ export interface RangeSpec {
    * compute this one the tile says so rather than reusing another.
    */
   consumerWindow: ConsumerWindow;
+  /** Custom ranges only: inclusive ISO bounds. */
+  from?: string;
+  to?: string;
 }
 
-export type RangeId = "1w" | "1m" | "3m" | "6m" | "12m" | "all";
+export type RangeId = "1w" | "1m" | "3m" | "6m" | "12m" | "all" | "custom";
 
 export const RANGES: RangeSpec[] = [
   { id: "1w", label: "1W", grain: "day", count: 7, window: "last 7 days", days: 7, consumerWindow: "7" },
@@ -49,8 +52,60 @@ export function windowPhrase(range: RangeSpec): string {
 
 export const DEFAULT_RANGE: RangeId = "3m";
 
-/** URL values are user-controlled — never index with one unchecked. */
-export function readRange(raw: string | undefined): RangeSpec {
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Whole days between two ISO dates, inclusive of both ends. */
+function daysBetween(from: string, to: string): number {
+  const ms = Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z");
+  return Math.floor(ms / 86_400_000) + 1;
+}
+
+/**
+ * Builds the spec for an explicit from/to range.
+ *
+ * Grain is chosen from the span rather than fixed: under ~10 weeks a monthly
+ * chart would be two or three columns, and over a year a daily one would be
+ * 400+. The consumer window snaps to the nearest computed one, same rule the
+ * preset ranges use — those counts only exist for fixed windows.
+ */
+export function customRange(from: string, to: string): RangeSpec | null {
+  if (!ISO_DATE.test(from) || !ISO_DATE.test(to)) return null;
+  if (Number.isNaN(Date.parse(from)) || Number.isNaN(Date.parse(to))) return null;
+  if (from > to) return null;
+
+  const days = daysBetween(from, to);
+  const dayGrain = days <= 70;
+
+  const nearest: ConsumerWindow =
+    days <= 14 ? "7" : days <= 60 ? "30" : days <= 135 ? "90" : days <= 270 ? "180" : "365";
+
+  return {
+    id: "custom",
+    label: "Custom",
+    grain: dayGrain ? "day" : "month",
+    // Bounded by explicit dates rather than a count; metrics slices on `from`.
+    count: Infinity,
+    window: `${from} to ${to}`,
+    days,
+    consumerWindow: nearest,
+    from,
+    to,
+  };
+}
+
+/**
+ * URL values are user-controlled — never index with one unchecked.
+ * `range=custom` additionally needs valid from/to, or it falls back.
+ */
+export function readRange(
+  raw: string | undefined,
+  from?: string,
+  to?: string,
+): RangeSpec {
+  if (raw === "custom" && from && to) {
+    const custom = customRange(from, to);
+    if (custom) return custom;
+  }
   return (
     RANGES.find((r) => r.id === raw) ??
     RANGES.find((r) => r.id === DEFAULT_RANGE)!

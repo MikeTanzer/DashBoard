@@ -21,21 +21,16 @@ export function StatTile({
 }: Props) {
   return (
     <div
-      className={`card p-4 flex flex-col gap-1.5 ${span === 2 ? "sm:col-span-2" : ""}`}
+      className={`card p-5 flex flex-col gap-2 ${span === 2 ? "sm:col-span-2" : ""}`}
     >
-      <div
-        className="text-[11px] uppercase tracking-wider font-medium"
-        style={{ color: "var(--text-muted)" }}
-      >
-        {label}
-      </div>
+      <div className="eyebrow">{label}</div>
 
       {metric.available ? (
         <>
-          <div className="text-3xl font-semibold leading-tight">
+          <div className="display text-[30px]">
             {format(metric.value)}
           </div>
-          <div className="flex items-baseline gap-2 min-h-[18px]">
+          <div className="flex items-baseline gap-2 min-h-[16px]">
             {delta ? <Delta {...delta} /> : null}
             {metric.note ? (
               <span className="text-xs" style={{ color: "var(--text-muted)" }}>

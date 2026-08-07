@@ -21,8 +21,8 @@ const STATE_STYLE: Record<
  */
 export function SourcesPanel({ sources }: { sources: SourceStatus[] }) {
   return (
-    <section className="card p-5">
-      <h2 className="text-base font-semibold">Data sources</h2>
+    <section className="card p-6">
+      <h2 className="text-[15px] font-bold">Data sources</h2>
       <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
         Later sources override earlier ones on conflict, so automated feeds win
         over the manual file.

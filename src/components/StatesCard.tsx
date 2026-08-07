@@ -11,7 +11,7 @@ import {
   STATE_LABEL_POS,
   STATE_PATHS,
 } from "@/lib/us-map";
-import { axisTicks, fullNumber, money } from "@/lib/format";
+import { axisTicks, compactNumber, fullNumber, money } from "@/lib/format";
 
 type View = "map" | "bars" | "table";
 
@@ -116,10 +116,10 @@ export function StatesCard({ data, customersWithoutState }: Props) {
   };
 
   return (
-    <section className="card p-5" ref={wrapRef} style={{ position: "relative" }}>
+    <section className="card p-6" ref={wrapRef} style={{ position: "relative" }}>
       <header className="flex flex-wrap items-start justify-between gap-3 mb-1">
         <div>
-          <h2 className="text-base font-semibold">Customers by state</h2>
+          <h2 className="text-[15px] font-bold">Customers by state</h2>
           <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
             {data.length} state{data.length === 1 ? "" : "s"} with at least one
             customer
@@ -148,15 +148,41 @@ export function StatesCard({ data, customersWithoutState }: Props) {
           style={{ left: hover.x, top: hover.y }}
           role="status"
         >
-          <div className="font-semibold">{hover.state.name}</div>
-          <div style={{ color: "var(--text-secondary)" }}>
-            {fullNumber(hover.state.customers)} customer
-            {hover.state.customers === 1 ? "" : "s"} ·{" "}
-            {money(hover.state.mrrCents)}/mo
-          </div>
+          <div className="font-semibold mb-1">{hover.state.name}</div>
+          <TipRow
+            label="Customers"
+            value={fullNumber(hover.state.customers)}
+          />
+          <TipRow label="MRR" value={`${money(hover.state.mrrCents)}/mo`} />
+          <TipRow
+            label="Consumers"
+            value={
+              hover.state.consumers === null
+                ? "not tracked by state"
+                : compactNumber(hover.state.consumers)
+            }
+            dim={hover.state.consumers === null}
+          />
         </div>
       ) : null}
     </section>
+  );
+}
+
+function TipRow({
+  label,
+  value,
+  dim,
+}: {
+  label: string;
+  value: string;
+  dim?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-6">
+      <span className="tip-label">{label}</span>
+      <span className={dim ? "tip-dim" : "tip-value"}>{value}</span>
+    </div>
   );
 }
 
@@ -205,17 +231,17 @@ function Choropleth({
               strokeLinejoin="round"
               onMouseMove={(e) => (stat ? onHover(e, stat) : undefined)}
               onMouseLeave={onLeave}
-            >
-              {/* One expression, not two children — adjacent text nodes
-                  serialize differently on the server and break hydration. */}
-              <title>
-                {`${STATE_NAMES[code] ?? code} — ${
-                  empty
-                    ? "no customers"
-                    : `${count} customer${count === 1 ? "" : "s"}`
-                }`}
-              </title>
-            </path>
+              // aria-label, not <title>: a <title> child makes the browser draw
+              // its OWN tooltip on top of ours, so you get two overlapping
+              // boxes. This keeps the shape named for assistive tech without
+              // the duplicate.
+              role="img"
+              aria-label={`${STATE_NAMES[code] ?? code} — ${
+                empty
+                  ? "no customers"
+                  : `${count} customer${count === 1 ? "" : "s"}`
+              }`}
+            />
           );
         })}
 
@@ -488,24 +514,13 @@ function ViewToggle({
     ["table", "Table"],
   ];
   return (
-    <div
-      className="flex rounded-lg overflow-hidden"
-      style={{ border: "1px solid var(--border)" }}
-      role="tablist"
-      aria-label="Chart view"
-    >
+    <div className="seg" role="tablist" aria-label="Chart view">
       {options.map(([id, label]) => (
         <button
           key={id}
           role="tab"
           aria-selected={view === id}
           onClick={() => onChange(id)}
-          className="px-3 py-1.5 text-xs font-medium transition-colors"
-          style={{
-            background: view === id ? "var(--surface-2)" : "transparent",
-            color:
-              view === id ? "var(--text-primary)" : "var(--text-secondary)",
-          }}
         >
           {label}
         </button>

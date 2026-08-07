@@ -125,6 +125,7 @@ export const internalApiConnector: Connector = {
       platform: c.platform ?? "unassigned",
       tracked: c.tracked ?? 0,
       purchasers: toPurchasers(c),
+      consumersByState: c.consumersByState,
     }));
     if (consumers.length) provides.push("consumers");
 

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import type { Platform } from "@/lib/types";
 import { DEFAULT_RANGE, type RangeId } from "@/lib/range";
+import { PlatformLogo, hasPlatformLogo } from "./PlatformLogo";
 
 /**
  * One filter row above everything it scopes — every card re-renders against the
@@ -19,11 +20,16 @@ export function FilterBar({
   platforms,
   selected,
   range,
+  from,
+  to,
 }: {
   platforms: Platform[];
   selected: string[];
   /** Carried through so changing platform doesn't reset the time range. */
   range: RangeId;
+  /** Custom-range bounds, carried for the same reason. */
+  from?: string;
+  to?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -34,6 +40,10 @@ export function FilterBar({
     const params = new URLSearchParams();
     if (next.length) params.set("platform", next.join(","));
     if (range !== DEFAULT_RANGE) params.set("range", range);
+    if (range === "custom" && from && to) {
+      params.set("from", from);
+      params.set("to", to);
+    }
     const qs = params.toString();
     startTransition(() => router.push(qs ? `/?${qs}` : "/", { scroll: false }));
   };
@@ -50,27 +60,60 @@ export function FilterBar({
       className="flex flex-wrap items-center gap-2"
       style={{ opacity: pending ? 0.6 : 1, transition: "opacity 120ms" }}
     >
-      <span
-        className="text-[11px] uppercase tracking-wider font-medium mr-1"
-        style={{ color: "var(--text-muted)" }}
-      >
-        Platform
-      </span>
+      <span className="eyebrow mr-1">Platform</span>
 
       <Chip active={all} onClick={() => setPlatforms([])}>
+        <AllMark />
         All platforms
       </Chip>
 
-      {platforms.map((p) => (
-        <Chip
-          key={p.id}
-          active={!all && selected.includes(p.id)}
-          onClick={() => toggle(p.id)}
-        >
-          {p.name}
-        </Chip>
-      ))}
+      {platforms.map((p) =>
+        // Where we hold the real wordmark, it IS the label — repeating the name
+        // beside it just says the same thing twice.
+        hasPlatformLogo(p.id) ? (
+          <Chip
+            key={p.id}
+            active={!all && selected.includes(p.id)}
+            onClick={() => toggle(p.id)}
+          >
+            <PlatformLogo platform={p.id} />
+          </Chip>
+        ) : (
+          <Chip
+            key={p.id}
+            active={!all && selected.includes(p.id)}
+            onClick={() => toggle(p.id)}
+          >
+            {p.name}
+          </Chip>
+        ),
+      )}
     </div>
+  );
+}
+
+/** Two overlapping marks, standing for "more than one platform". */
+function AllMark({ size = 17 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 17 17"
+      aria-hidden="true"
+      style={{ flexShrink: 0, display: "block" }}
+    >
+      <rect x="0" y="0" width="12" height="12" rx="3.6" fill="#1f3155" />
+      <rect
+        x="5"
+        y="5"
+        width="12"
+        height="12"
+        rx="3.6"
+        fill="#e1639c"
+        stroke="var(--chip-bg, #fff)"
+        strokeWidth="1.6"
+      />
+    </svg>
   );
 }
 
@@ -87,12 +130,7 @@ function Chip({
     <button
       onClick={onClick}
       aria-pressed={active}
-      className="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
-      style={{
-        border: `1px solid ${active ? "transparent" : "var(--border)"}`,
-        background: active ? "var(--text-primary)" : "transparent",
-        color: active ? "var(--page)" : "var(--text-secondary)",
-      }}
+      className="chip flex items-center gap-2"
     >
       {children}
     </button>

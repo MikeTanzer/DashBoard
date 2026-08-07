@@ -54,6 +54,14 @@ export interface ConsumerStats {
    * reports itself as untracked.
    */
   purchasers: Record<string, number>;
+  /**
+   * Optional: tracked consumers per USPS state code.
+   *
+   * Consumers are counted per platform by default — there's no state dimension
+   * unless the source groups by one. Supply it and the map tooltip gains a
+   * consumer line; omit it and the tooltip says so.
+   */
+  consumersByState?: Record<string, number>;
 }
 
 /** Window keys the UI knows how to ask for. */

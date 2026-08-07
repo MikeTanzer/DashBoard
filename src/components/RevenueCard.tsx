@@ -86,22 +86,19 @@ export function RevenueCard({
 
   return (
     <section
-      className="card p-5 sm:p-6"
+      className="hero-card p-6 sm:p-7"
       ref={wrapRef}
       style={{ position: "relative" }}
     >
       {/* Headline ---------------------------------------------------------- */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div
-            className="text-[11px] uppercase tracking-wider font-medium"
-            style={{ color: "var(--text-muted)" }}
-          >
+          <div className="eyebrow">
             {unavailableReason
               ? `Revenue · ${scopeLabel}`
               : `Revenue collected · ${range.window} · ${scopeLabel}`}
           </div>
-          <div className="text-5xl font-semibold leading-none mt-2 tracking-tight">
+          <div className="display text-[52px] mt-2.5">
             {unavailableReason ? "—" : money(windowTotalCents)}
           </div>
           <div
@@ -131,7 +128,7 @@ export function RevenueCard({
         style={{ borderTop: "1px solid var(--border)" }}
       >
         <div className="flex items-baseline justify-between gap-3 mb-1">
-          <h2 className="text-sm font-semibold">
+          <h2 className="text-[13px] font-bold">
             Collected revenue by {dayGrain ? "day" : "month"}
           </h2>
           {!unavailableReason ? (
@@ -408,23 +405,13 @@ function ViewToggle({
     ["table", "Table"],
   ];
   return (
-    <div
-      className="flex rounded-lg overflow-hidden"
-      style={{ border: "1px solid var(--border)" }}
-      role="tablist"
-      aria-label="Revenue view"
-    >
+    <div className="seg" role="tablist" aria-label="Revenue view">
       {options.map(([id, label]) => (
         <button
           key={id}
           role="tab"
           aria-selected={view === id}
           onClick={() => onChange(id)}
-          className="px-3 py-1.5 text-xs font-medium"
-          style={{
-            background: view === id ? "var(--surface-2)" : "transparent",
-            color: view === id ? "var(--text-primary)" : "var(--text-secondary)",
-          }}
         >
           {label}
         </button>

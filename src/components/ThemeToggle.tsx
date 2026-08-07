@@ -34,11 +34,7 @@ export function ThemeToggle({ initial }: { initial: ThemeMode }) {
       onClick={change}
       title={`Theme: ${mode} — click for ${next}`}
       aria-label={`Theme: ${mode}. Switch to ${next}.`}
-      className="px-2.5 py-1.5 rounded-lg text-xs font-medium"
-      style={{
-        border: "1px solid var(--border)",
-        color: "var(--text-secondary)",
-      }}
+      className="ghost-btn"
     >
       {mode === "system" ? "Auto" : mode === "light" ? "Light" : "Dark"}
     </button>

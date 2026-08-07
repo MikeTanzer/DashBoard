@@ -1,141 +1,169 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   Pyrotree design tokens.
-   Chart colors come from the validated reference palette; light and dark are
-   separately-stepped sets, not an automatic flip. Surfaces here are the exact
-   surfaces the palette was validated against.
+   Pyrotree design tokens, drawn from webjoint.com.
+
+   The brand there is a deep navy ground (#021232) with a single coral accent
+   (#ff586e), Inter at tight negative tracking, generous radii and soft
+   navy-tinted shadows. This file is that system; components reference roles,
+   never raw hex, so light and dark swap in one place.
+
+   Chart series colors are NOT the brand colors used decoratively — they were
+   validated for colorblind separation and surface contrast in both modes, and
+   again against the navy hero. Changing them needs a re-run of that check.
    --------------------------------------------------------------------------- */
 
 :root {
   color-scheme: light;
 
-  --page: #f9f9f7;
-  --surface-1: #fcfcfb;
-  --surface-2: #f3f3f0;
+  /* Brand constants — identical in both modes. */
+  --navy: #021232;
+  --navy-lift: #0a2a5c;
+  --coral: #ff586e;
+  --coral-soft: #ff7a8a;
+  --coral-deep: #e8384f;
 
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #898781;
+  /* Surfaces */
+  --page: #f1f5f9;
+  --surface-1: #ffffff;
+  --surface-2: #f1f5f9;
+  --surface-sunken: #e2e8f0;
 
-  --gridline: #e1e0d9;
-  --axis: #c3c2b7;
-  --border: rgba(11, 11, 11, 0.1);
-  --border-strong: rgba(11, 11, 11, 0.18);
+  /* Ink */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
 
-  /* categorical slots */
-  --series-1: #2a78d6; /* blue   — SaaS */
-  --series-2: #eb6834; /* orange — Usage */
-  --series-3: #1baf7a;
+  /* Lines */
+  --gridline: #e9eef5;
+  --axis: #cbd5e1;
+  --border: rgba(2, 18, 50, 0.09);
+  --border-strong: rgba(2, 18, 50, 0.16);
 
-  /* sequential blue ramp, light→dark (magnitude) */
-  --seq-100: #cde2fb;
-  --seq-200: #9ec5f4;
-  --seq-300: #6da7ec;
-  --seq-400: #3987e5;
-  --seq-500: #256abf;
-  --seq-600: #184f95;
-  --seq-700: #0d366b;
+  --shadow-card: 0 1px 2px rgba(2, 18, 50, 0.04), 0 8px 24px -12px rgba(2, 18, 50, 0.18);
+  --shadow-hero: 0 18px 48px -20px rgba(2, 18, 50, 0.55);
 
-  /* Ink that clears contrast when set on each sequential step. */
-  --ink-on-seq-100: #0b0b0b;
-  --ink-on-seq-200: #0b0b0b;
-  --ink-on-seq-300: #0b0b0b;
+  /* Chart series — validated pair */
+  --series-1: #2563eb;
+  --series-2: #ff586e;
+
+  /* Sequential ramp, light → dark */
+  --seq-100: #dbe7fe;
+  --seq-200: #bcd3fd;
+  --seq-300: #93b8fb;
+  --seq-400: #6098f8;
+  --seq-500: #2563eb;
+  --seq-600: #1b4bb8;
+  --seq-700: #0a2a5c;
+
+  --ink-on-seq-100: #0f172a;
+  --ink-on-seq-200: #0f172a;
+  --ink-on-seq-300: #0f172a;
   --ink-on-seq-400: #ffffff;
   --ink-on-seq-500: #ffffff;
   --ink-on-seq-600: #ffffff;
   --ink-on-seq-700: #ffffff;
 
-  --status-good: #0ca30c;
-  --status-warning: #fab219;
-  --status-serious: #ec835a;
-  --status-critical: #d03b3b;
-  --delta-good: #006300;
+  --status-good: #0f9d58;
+  --status-warning: #f0a202;
+  --status-critical: #e8384f;
+  --delta-good: #087f45;
 
-  --brand: #e2571f;
+  --brand: var(--coral);
 }
+
+/* --- Dark: the navy world -------------------------------------------------- */
 
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
 
-    --page: #0d0d0d;
-    --surface-1: #1a1a19;
-    --surface-2: #232322;
+    --page: #021232;
+    --surface-1: #08214a;
+    --surface-2: #0d2b5c;
+    --surface-sunken: #04183c;
 
     --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #898781;
+    --text-secondary: #a9bcd8;
+    --text-muted: #7c93b5;
 
-    --gridline: #2c2c2a;
-    --axis: #383835;
+    --gridline: #12305f;
+    --axis: #1c3f75;
     --border: rgba(255, 255, 255, 0.1);
-    --border-strong: rgba(255, 255, 255, 0.18);
+    --border-strong: rgba(255, 255, 255, 0.2);
 
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+    --shadow-hero: 0 18px 48px -20px rgba(0, 0, 0, 0.7);
 
-    --seq-100: #184f95;
-    --seq-200: #256abf;
-    --seq-300: #2a78d6;
-    --seq-400: #3987e5;
-    --seq-500: #5598e7;
-    --seq-600: #86b6ef;
-    --seq-700: #b7d3f6;
+    --series-1: #3d84f0;
+    --series-2: #ef4a63;
 
-    /* The dark ramp runs dark→light, so the safe ink flips with it. */
+    --seq-100: #0f2f66;
+    --seq-200: #16407f;
+    --seq-300: #1d54a3;
+    --seq-400: #2b6bd0;
+    --seq-500: #4d8ef7;
+    --seq-600: #86b3fb;
+    --seq-700: #bcd6fd;
+
     --ink-on-seq-100: #ffffff;
     --ink-on-seq-200: #ffffff;
     --ink-on-seq-300: #ffffff;
     --ink-on-seq-400: #ffffff;
-    --ink-on-seq-500: #0b0b0b;
-    --ink-on-seq-600: #0b0b0b;
-    --ink-on-seq-700: #0b0b0b;
+    --ink-on-seq-500: #021232;
+    --ink-on-seq-600: #021232;
+    --ink-on-seq-700: #021232;
 
-    --delta-good: #0ca30c;
-    --brand: #f0733d;
+    --status-good: #22c55e;
+    --status-warning: #fbbf24;
+    --status-critical: #fb7185;
+    --delta-good: #22c55e;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --page: #0d0d0d;
-  --surface-1: #1a1a19;
-  --surface-2: #232322;
+  --page: #021232;
+  --surface-1: #08214a;
+  --surface-2: #0d2b5c;
+  --surface-sunken: #04183c;
 
   --text-primary: #ffffff;
-  --text-secondary: #c3c2b7;
-  --text-muted: #898781;
+  --text-secondary: #a9bcd8;
+  --text-muted: #7c93b5;
 
-  --gridline: #2c2c2a;
-  --axis: #383835;
+  --gridline: #12305f;
+  --axis: #1c3f75;
   --border: rgba(255, 255, 255, 0.1);
-  --border-strong: rgba(255, 255, 255, 0.18);
+  --border-strong: rgba(255, 255, 255, 0.2);
 
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --series-3: #199e70;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --shadow-hero: 0 18px 48px -20px rgba(0, 0, 0, 0.7);
 
-  --seq-100: #184f95;
-  --seq-200: #256abf;
-  --seq-300: #2a78d6;
-  --seq-400: #3987e5;
-  --seq-500: #5598e7;
-  --seq-600: #86b6ef;
-  --seq-700: #b7d3f6;
+  --series-1: #3d84f0;
+  --series-2: #ef4a63;
+
+  --seq-100: #0f2f66;
+  --seq-200: #16407f;
+  --seq-300: #1d54a3;
+  --seq-400: #2b6bd0;
+  --seq-500: #4d8ef7;
+  --seq-600: #86b3fb;
+  --seq-700: #bcd6fd;
 
   --ink-on-seq-100: #ffffff;
   --ink-on-seq-200: #ffffff;
   --ink-on-seq-300: #ffffff;
   --ink-on-seq-400: #ffffff;
-  --ink-on-seq-500: #0b0b0b;
-  --ink-on-seq-600: #0b0b0b;
-  --ink-on-seq-700: #0b0b0b;
+  --ink-on-seq-500: #021232;
+  --ink-on-seq-600: #021232;
+  --ink-on-seq-700: #021232;
 
-  --delta-good: #0ca30c;
-  --brand: #f0733d;
+  --status-good: #22c55e;
+  --status-warning: #fbbf24;
+  --status-critical: #fb7185;
+  --delta-good: #22c55e;
 }
 
 @theme inline {
@@ -145,10 +173,9 @@
   --color-primary: var(--text-primary);
   --color-secondary: var(--text-secondary);
   --color-muted: var(--text-muted);
-  --color-hairline: var(--border);
-  --color-brand: var(--brand);
-  --font-sans:
-    system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --color-coral: var(--coral);
+  --color-navy: var(--navy);
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 html,
@@ -157,25 +184,249 @@ body {
   color: var(--text-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Cards ------------------------------------------------------------------- */
+/* --- Layout ---------------------------------------------------------------- */
+
+.shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-inline: 20px;
+}
+@media (min-width: 640px) {
+  .shell {
+    padding-inline: 32px;
+  }
+}
+
+/* The navy bar, straight off webjoint.com's nav. Full bleed in both modes —
+   it's the brand's strongest single gesture and shouldn't only appear in dark. */
+.topbar {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-lift) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.topbar .muted {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.ghost-btn {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 9999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.06);
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.ghost-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+/* --- Cards ----------------------------------------------------------------- */
 
 .card {
   background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
 }
 
-.hairline {
-  border-color: var(--border);
+/* The signature card: navy gradient, mirroring the site's hero band. Chart
+   colors inside are pinned to the dark-mode steps, which were validated
+   against this exact ground — the surrounding page may still be light. */
+.hero-card {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-lift) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  box-shadow: var(--shadow-hero);
+  color: #ffffff;
+
+  --text-primary: #ffffff;
+  --text-secondary: #a9bcd8;
+  --text-muted: #8ba3c4;
+  --surface-1: #0a2a5c;
+  --surface-2: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.14);
+  --border-strong: rgba(255, 255, 255, 0.26);
+  --gridline: rgba(255, 255, 255, 0.09);
+  --axis: rgba(255, 255, 255, 0.22);
+  --series-1: #3d84f0;
+  --series-2: #ef4a63;
 }
 
-/* Chart chrome ------------------------------------------------------------ */
+/* --- Type ------------------------------------------------------------------ */
+
+.display {
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  font-variant-numeric: proportional-nums;
+}
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.018em;
+}
+
+/* --- Controls -------------------------------------------------------------- */
+
+.chip {
+  --chip-bg: var(--surface-1);
+  border-radius: 9999px;
+  padding: 7px 16px;
+  min-height: 34px;
+  font-size: 12.5px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: var(--surface-1);
+  transition: all 140ms ease;
+}
+.chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.chip[aria-pressed="true"] {
+  --chip-bg: var(--coral);
+  background: var(--coral);
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 2px 10px -2px rgba(255, 88, 110, 0.6);
+}
+
+.seg {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-1);
+}
+.seg button {
+  padding: 6px 13px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all 130ms ease;
+}
+.seg button:hover {
+  color: var(--text-primary);
+  background: var(--surface-2);
+}
+.seg button[aria-pressed="true"],
+.seg button[aria-selected="true"] {
+  background: var(--navy);
+  color: #ffffff;
+}
+.hero-card .seg button[aria-pressed="true"],
+.hero-card .seg button[aria-selected="true"] {
+  background: var(--coral);
+  color: #ffffff;
+}
+
+/* Standalone sibling of the segmented control. */
+.seg-solo {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  padding: 6px 13px;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  transition: all 130ms ease;
+  white-space: nowrap;
+}
+.seg-solo:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+.seg-solo[aria-pressed="true"] {
+  background: var(--navy);
+  border-color: transparent;
+  color: #ffffff;
+}
+
+.date-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 40;
+  width: 310px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: 0 18px 44px -14px rgba(2, 18, 50, 0.45);
+  padding: 16px;
+}
+
+.date-pop input[type="date"] {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.date-pop input[type="date"]:focus {
+  outline: 2px solid var(--coral);
+  outline-offset: 1px;
+}
+
+.btn-primary {
+  background: var(--coral);
+  color: #ffffff;
+  border-radius: 9px;
+  padding: 7px 15px;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: filter 130ms ease;
+}
+.btn-primary:hover {
+  filter: brightness(1.07);
+}
+
+.btn-quiet {
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 7px 13px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.btn-quiet:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* --- Chart chrome ---------------------------------------------------------- */
 
 .axis-text {
   fill: var(--text-muted);
   font-size: 11px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -189,25 +440,41 @@ body {
   stroke-width: 1;
 }
 
-/* Tooltip ----------------------------------------------------------------- */
+/* The tooltip is navy in BOTH themes, so any child reaching for a text token
+   (which flips with the theme) can land on near-black. Force white here and
+   let opacity carry the hierarchy — one rule beats auditing every caller. */
+.viz-tooltip,
+.viz-tooltip * {
+  color: #ffffff !important;
+}
+.viz-tooltip .tip-label {
+  opacity: 0.72;
+  font-weight: 500;
+}
+.viz-tooltip .tip-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.viz-tooltip .tip-dim {
+  opacity: 0.78;
+  font-weight: 400;
+}
 
 .viz-tooltip {
   position: absolute;
   z-index: 30;
   pointer-events: none;
-  background: var(--surface-1);
-  color: var(--text-primary);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  padding: 8px 10px;
+  background: var(--navy);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  padding: 9px 12px;
   font-size: 12px;
-  line-height: 1.45;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+  line-height: 1.5;
+  box-shadow: 0 12px 32px -8px rgba(2, 18, 50, 0.6);
   white-space: nowrap;
-  transform: translate(-50%, calc(-100% - 10px));
+  transform: translate(-50%, calc(-100% - 12px));
 }
-
-/* Texture — the opt-in accessibility channel (print + forced-colors) ------- */
 
 @media print, (forced-colors: active) {
   .texture-a {
@@ -218,6 +485,8 @@ body {
   }
 }
 
+/* --- Tables ---------------------------------------------------------------- */
+
 table.dataview {
   width: 100%;
   border-collapse: collapse;
@@ -227,8 +496,19 @@ table.dataview {
 table.dataview th,
 table.dataview td {
   text-align: left;
-  padding: 7px 10px;
+  padding: 9px 12px;
   border-bottom: 1px solid var(--border);
+}
+
+table.dataview tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+table.dataview tbody tr {
+  transition: background 120ms ease;
+}
+table.dataview tbody tr:hover {
+  background: var(--surface-2);
 }
 
 table.dataview td.num,
@@ -239,8 +519,17 @@ table.dataview th.num {
 
 table.dataview thead th {
   color: var(--text-muted);
-  font-weight: 500;
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
 }

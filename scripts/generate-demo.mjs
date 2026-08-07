@@ -251,7 +251,7 @@ revenueDaily.sort((a, b) => a.date.localeCompare(b.date));
  * Growth flattens as the window widens, which is what repeat-purchase behaviour
  * actually looks like: the 365-day figure is nowhere near 12x the 30-day one.
  */
-function makeConsumerRollup(platform, tracked, rate30) {
+function makeConsumerRollup(platform, tracked, rate30, stateWeights) {
   const p30 = Math.round(tracked * rate30);
   const purchasers = {
     7: Math.round(p30 * 0.34),
@@ -277,7 +277,31 @@ function makeConsumerRollup(platform, tracked, rate30) {
     throw new Error(`${platform}: more purchasers (${purchasers.ever}) than tracked (${tracked})`);
   }
 
-  return { platform, tracked, purchasers };
+  // Split tracked consumers across the states this platform actually sells in,
+  // weighted the same way its customers are — consumers live where the
+  // storefronts are. The remainder goes to the largest state so the parts sum
+  // exactly to `tracked`.
+  const weights = new Map();
+  for (const code of stateWeights) {
+    weights.set(code, (weights.get(code) ?? 0) + 1);
+  }
+  const totalWeight = [...weights.values()].reduce((a, b) => a + b, 0);
+  const entries = [...weights.entries()].sort((a, b) => b[1] - a[1]);
+
+  const consumersByState = {};
+  let left = tracked;
+  entries.forEach(([code, w], i) => {
+    const share = i === entries.length - 1 ? left : Math.round(tracked * (w / totalWeight));
+    consumersByState[code] = share;
+    left -= share;
+  });
+
+  const sum = Object.values(consumersByState).reduce((a, b) => a + b, 0);
+  if (sum !== tracked) {
+    throw new Error(`${platform}: consumersByState sums to ${sum}, expected ${tracked}`);
+  }
+
+  return { platform, tracked, purchasers, consumersByState };
 }
 
 const payload = {
@@ -290,8 +314,8 @@ const payload = {
   ],
   customers,
   consumers: [
-    makeConsumerRollup("webjoint", 812_400, 0.117),
-    makeConsumerRollup("menu", 348_900, 0.089),
+    makeConsumerRollup("webjoint", 812_400, 0.117, WEBJOINT_STATES),
+    makeConsumerRollup("menu", 348_900, 0.089, MENU_STATES),
   ],
   revenue,
   revenueDaily,
