@@ -112,6 +112,9 @@ export function SeriesChart({
               </g>
             ))}
 
+            {/* Remounted when the selected metric changes, so the columns
+                replay instead of keeping a finished animation. */}
+            <g key={`${series.title}-${points.length}-${points[0]?.key ?? ""}`}>
             {points.map((p, i) => {
               const cx = LEFT + i * slot + slot / 2;
               const x = cx - barW / 2;
@@ -134,17 +137,27 @@ export function SeriesChart({
                     height={PLOT_H}
                     fill="transparent"
                   />
-                  <rect
-                    x={x}
-                    y={top}
-                    width={barW}
-                    height={Math.max(1, height)}
-                    rx={Math.min(4, barW / 3)}
-                    fill={
-                      negative ? "var(--status-critical)" : "var(--series-1)"
-                    }
-                    className="texture-a"
-                  />
+                  <g
+                    className="bar-rise"
+                    style={{
+                      // The zero line, not the plot floor — a series that dips
+                      // negative has to grow downward from the same origin.
+                      transformOrigin: `0px ${TOP_PAD + zeroY}px`,
+                      animationDelay: `${Math.min(i * 26, 400)}ms`,
+                    }}
+                  >
+                    <rect
+                      x={x}
+                      y={top}
+                      width={barW}
+                      height={Math.max(1, height)}
+                      rx={Math.min(4, barW / 3)}
+                      fill={
+                        negative ? "var(--status-critical)" : "var(--series-1)"
+                      }
+                      className="texture-a"
+                    />
+                  </g>
                   <text
                     className="axis-text"
                     x={cx}
@@ -157,6 +170,7 @@ export function SeriesChart({
                 </g>
               );
             })}
+            </g>
           </g>
         </svg>
       </div>

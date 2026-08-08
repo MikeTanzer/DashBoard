@@ -22,6 +22,7 @@ import {
 } from "@/lib/format";
 import { useElementWidth } from "@/lib/useElementWidth";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { useInView } from "@/lib/useInView";
 
 type View = "map" | "bars" | "table";
 
@@ -542,6 +543,10 @@ function Choropleth({
   const GUTTER = useMediaQuery("(max-width: 640px)") ? 0 : 84;
   const VB_W = MAP_WIDTH + GUTTER;
 
+  // Entrance animation, fired the first time the map scrolls into view — which
+  // includes page load when it's already on screen.
+  const [viewRef, inView] = useInView<HTMLDivElement>();
+
   /**
    * Which labels can be drawn without landing on one already placed.
    *
@@ -602,7 +607,10 @@ function Choropleth({
   })();
 
   return (
-    <div className="overflow-x-auto">
+    <div
+      className={`overflow-x-auto ${inView ? "map-enter" : "map-idle"}`}
+      ref={viewRef}
+    >
       <svg
         viewBox={`0 0 ${VB_W} ${MAP_HEIGHT}`}
         width="100%"
@@ -619,12 +627,18 @@ function Choropleth({
           return (
             <path
               key={code}
+              className="state-shape"
               d={d}
               fill={empty ? "var(--surface-2)" : step(bin(count))}
               stroke="var(--surface-1)"
               strokeWidth={1}
               strokeLinejoin="round"
-              style={stat ? { cursor: "pointer" } : undefined}
+              style={{
+                // Staggered by longitude so the fill sweeps west to east
+                // rather than appearing in whatever order the path data sits.
+                animationDelay: `${Math.round(((STATE_LABEL_POS[code]?.[0] ?? 0) / MAP_WIDTH) * 260)}ms`,
+                cursor: stat ? "pointer" : undefined,
+              }}
               onClick={() => (stat ? onPick(code) : undefined)}
               onPointerMove={(e) => (stat ? onHover(e, stat) : undefined)}
               onPointerDown={(e) => (stat ? onHover(e, stat) : undefined)}

@@ -860,6 +860,75 @@ a:focus-visible {
   }
 }
 
+/* Columns grow out of the baseline on first paint and whenever the series
+   behind them changes. Scaled rather than animated on `height`, because the
+   SaaS segment is a <path> whose `d` can't be interpolated — one transform on
+   a wrapping <g> moves both segments together and stays on the compositor.
+   The origin is passed per chart as an inline transform-origin, since the
+   baseline sits at the zero line, which is inside the plot for a series that
+   goes negative. */
+@keyframes bar-rise {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.bar-rise {
+  transform-box: view-box;
+  animation: bar-rise 520ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-rise {
+    animation: none;
+  }
+}
+
+/* The map fills in west to east when it first scrolls into view. Opacity plus
+   a small lift, staggered by longitude — scaling individual states would warp
+   the projection, which is the one thing a map can't afford. */
+@keyframes state-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.map-enter .state-shape {
+  transform-box: fill-box;
+  animation: state-in 420ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* Labels and leader lines follow the shapes rather than racing them. */
+.map-enter .map-label {
+  animation: state-in 380ms ease-out both;
+  animation-delay: 420ms;
+}
+
+/* Until it has been seen, the map is invisible — otherwise it would paint at
+   full strength and then animate, which reads as a flicker. */
+.map-idle .state-shape,
+.map-idle .map-label {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-enter .state-shape,
+  .map-enter .map-label,
+  .map-idle .state-shape,
+  .map-idle .map-label {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 /* --- Chart chrome ---------------------------------------------------------- */
 
 .axis-text {

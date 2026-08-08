@@ -248,6 +248,10 @@ export function RevenueCard({
                   </g>
                 ))}
 
+                {/* Keyed on the dataset so React remounts these nodes when the
+                    range, bucket or platform changes — reusing them would keep
+                    the finished animation and nothing would replay. */}
+                <g key={`${bucket}-${bars.length}-${bars[0]?.key ?? ""}-${bars[bars.length - 1]?.key ?? ""}`}>
                 {bars.map((b, i) => {
                   const cx = startX + i * slot + slot / 2;
                   const x = cx - barW / 2;
@@ -272,23 +276,31 @@ export function RevenueCard({
                         height={PLOT_H}
                         fill="transparent"
                       />
-                      {usageH > 0 ? (
-                        <rect
-                          x={x}
-                          y={usageTop}
-                          width={barW}
-                          height={usageH}
-                          fill="var(--series-2)"
-                          className="texture-b"
-                        />
-                      ) : null}
-                      {saasH > 0 ? (
-                        <path
-                          d={roundedTopBar(x, saasTop, barW, saasH, barR)}
-                          fill="var(--series-1)"
-                          className="texture-a"
-                        />
-                      ) : null}
+                      <g
+                        className="bar-rise"
+                        style={{
+                          transformOrigin: `0px ${TOP_PAD + PLOT_H}px`,
+                          animationDelay: `${Math.min(i * 26, 400)}ms`,
+                        }}
+                      >
+                        {usageH > 0 ? (
+                          <rect
+                            x={x}
+                            y={usageTop}
+                            width={barW}
+                            height={usageH}
+                            fill="var(--series-2)"
+                            className="texture-b"
+                          />
+                        ) : null}
+                        {saasH > 0 ? (
+                          <path
+                            d={roundedTopBar(x, saasTop, barW, saasH, barR)}
+                            fill="var(--series-1)"
+                            className="texture-a"
+                          />
+                        ) : null}
+                      </g>
                       {lastComplete === b.key ? (
                         <text
                           x={cx}
@@ -313,6 +325,7 @@ export function RevenueCard({
                     </g>
                   );
                 })}
+                </g>
 
                 <line
                   className="baseline"
