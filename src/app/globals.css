@@ -589,12 +589,20 @@ a:focus-visible {
   .chart-bars {
     min-width: 0;
   }
-  /* The map can't reflow — the projection is fixed geometry — so it keeps a
-     floor and scrolls sideways inside its own container. 520px squeezed the
-     state labels to 8.5px; 700 keeps them near 11px, which is legible, and
-     scrolling a map is a normal thing to do on a phone. */
+  /* The map now scales to the screen instead of keeping a 700px floor and
+     scrolling sideways. The floor existed to protect the state labels, but it
+     meant the right edge of the country was simply off-screen on every phone,
+     and a map you have to scroll to see the shape of isn't doing its job.
+
+     Scaling to 360px puts those labels at 4-5px, so they come off entirely
+     rather than being shipped illegible. The shading still carries the
+     distribution, tapping a state still gives exact figures, and Bars / Table
+     — one tap away in the same card — carry the full ranked list. */
   .chart-map {
-    min-width: 700px;
+    min-width: 0;
+  }
+  .map-label {
+    display: none;
   }
 }
 

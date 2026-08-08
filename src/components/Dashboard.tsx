@@ -337,7 +337,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
 function DemoBanner() {
   return (
     <div
-      className="mb-6 rounded-2xl px-5 py-4 flex items-start gap-3"
+      className="mb-6 rounded-2xl px-5 py-4 flex items-start gap-3 max-[640px]:mb-3 max-[640px]:px-3 max-[640px]:py-2.5 max-[640px]:rounded-xl max-[640px]:gap-2"
       style={{
         background: "color-mix(in srgb, var(--status-warning) 12%, var(--surface-1))",
         border: "1px solid color-mix(in srgb, var(--status-warning) 45%, transparent)",
@@ -354,12 +354,19 @@ function DemoBanner() {
           <circle cx="8" cy="11.4" r="1" fill="currentColor" />
         </svg>
       </span>
-      <div className="text-[13.5px] leading-relaxed">
+      <div className="text-[13.5px] leading-relaxed max-[640px]:text-[12.5px] max-[640px]:leading-snug">
         <strong>Demo data.</strong>{" "}
         <span style={{ color: "var(--text-secondary)" }}>
-          These numbers come from <code className="font-mono text-[12.5px]">data/network.json</code>,
-          which has <code className="font-mono text-[12.5px]">&quot;demo&quot;: true</code>. Connect a
-          source or replace that file with real records, and this banner disappears.
+          {/* Four lines of setup instructions push the revenue chart below the
+              fold on a phone. The warning is what matters on a small screen;
+              the how-to-replace-it detail is desk work, so it waits for a
+              desk-sized viewport. */}
+          <span className="max-[640px]:hidden">
+            These numbers come from <code className="font-mono text-[12.5px]">data/network.json</code>,
+            which has <code className="font-mono text-[12.5px]">&quot;demo&quot;: true</code>. Connect a
+            source or replace that file with real records, and this banner disappears.
+          </span>
+          <span className="hidden max-[640px]:inline">Not real figures yet.</span>
         </span>
       </div>
     </div>

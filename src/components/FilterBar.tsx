@@ -57,11 +57,23 @@ export function FilterBar({
     startTransition(() => router.push(qs ? `/?${qs}` : "/", { scroll: false }));
   };
 
+  /**
+   * Clicking a platform scopes the dashboard to that platform. Clicking the
+   * one already showing clears back to the whole network.
+   *
+   * This used to ADD to the selection, which broke on a two-platform network:
+   * from WebJoint, clicking Menu.com selected both — and "both of two" is the
+   * same as "all", so it collapsed to All platforms. The chip appeared to do
+   * nothing and you had to click it a second time to actually get there.
+   *
+   * Selecting an arbitrary subset only becomes meaningful at three or more
+   * platforms, and it needs a control that says so; with a dedicated "All
+   * platforms" chip sitting right there, accumulating on plain click reads as
+   * a bug either way.
+   */
   const toggle = (id: string) => {
-    const next = selected.includes(id)
-      ? selected.filter((s) => s !== id)
-      : [...selected, id];
-    setPlatforms(next.length === platforms.length ? [] : next);
+    const only = selected.length === 1 && selected[0] === id;
+    setPlatforms(only ? [] : [id]);
   };
 
   return (
@@ -69,7 +81,9 @@ export function FilterBar({
       className="control-scroll flex flex-wrap items-center gap-2"
       style={{ opacity: pending ? 0.6 : 1, transition: "opacity 120ms" }}
     >
-      <span className="eyebrow mr-1">Platform</span>
+      {/* The chips are self-evidently a platform picker — on a phone the label
+          only costs horizontal room the row doesn't have. */}
+      <span className="eyebrow mr-1 max-[640px]:hidden">Platform</span>
 
       <Chip active={all} onClick={() => setPlatforms([])}>
         <AllMark />

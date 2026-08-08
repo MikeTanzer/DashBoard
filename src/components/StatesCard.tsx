@@ -329,7 +329,7 @@ function Choropleth({
           // Big enough to hold the label — set it straight on the shape.
           if (ROOMY.has(stat.code)) {
             return (
-              <g key={stat.code} pointerEvents="none">
+              <g key={stat.code} className="map-label" pointerEvents="none">
                 <text
                   x={pos[0]}
                   y={pos[1] - 2}
@@ -359,7 +359,7 @@ function Choropleth({
           if (!out) return null;
           const leftOfLabel = out[0] > MAP_WIDTH / 2;
           return (
-            <g key={stat.code} pointerEvents="none">
+            <g key={stat.code} className="map-label" pointerEvents="none">
               <line
                 x1={pos[0]}
                 y1={pos[1]}
@@ -385,6 +385,15 @@ function Choropleth({
           );
         })}
       </svg>
+      {/* Shown only where the labels are suppressed, so the numbers they
+          carried are still one tap away rather than simply missing. */}
+      <p
+        className="hidden max-[640px]:block text-[11px] mt-2"
+        style={{ color: "var(--text-muted)" }}
+      >
+        Tap a state for its figures, or switch to Bars or Table for the ranked
+        list.
+      </p>
     </div>
   );
 }

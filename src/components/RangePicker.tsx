@@ -37,6 +37,43 @@ export function RangePicker({
   const [open, setOpen] = useState(false);
   const popRef = useRef<HTMLDivElement>(null);
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Bring the selected range into view when the row is too narrow to show it.
+   *
+   * Deliberately NOT `scrollIntoView`: that walks up the ancestor chain and
+   * scrolls the page as well, so landing on `?range=all` would jump the whole
+   * dashboard down. Setting `scrollLeft` on the row moves only the row.
+   *
+   * Measured with getBoundingClientRect rather than offsetLeft — the buttons
+   * sit inside `.seg` wrappers, so their offsetParent isn't this container and
+   * offsetLeft would be relative to the wrong box.
+   */
+  useEffect(() => {
+    const box = scrollRef.current;
+    if (!box) return;
+    // Nothing to do when the whole row already fits (desktop, tablet).
+    if (box.scrollWidth <= box.clientWidth + 1) return;
+
+    const active = box.querySelector<HTMLElement>("[data-range-active]");
+    if (!active) return;
+
+    const boxRect = box.getBoundingClientRect();
+    const activeRect = active.getBoundingClientRect();
+    const delta =
+      activeRect.left +
+      activeRect.width / 2 -
+      (boxRect.left + boxRect.width / 2);
+    if (Math.abs(delta) < 2) return;
+
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    box.scrollTo({
+      left: box.scrollLeft + delta,
+      behavior: reduced ? "auto" : "smooth",
+    });
+  }, [range, bucket]);
+
   const today = new Date().toISOString().slice(0, 10);
   const [draftFrom, setDraftFrom] = useState(from ?? "");
   const [draftTo, setDraftTo] = useState(to ?? today);
@@ -117,6 +154,7 @@ export function RangePicker({
 
   return (
     <div
+      ref={scrollRef}
       className="control-scroll flex items-center gap-2"
       style={{ opacity: pending ? 0.6 : 1, transition: "opacity 120ms" }}
     >
@@ -126,6 +164,10 @@ export function RangePicker({
             key={r.id}
             onClick={() => go(r.id)}
             aria-pressed={range === r.id}
+            // Marks the scroll target. aria-pressed alone wouldn't do: the
+            // bucket segment sets it too, and a plain query would centre
+            // whichever came first in the DOM.
+            data-range-active={range === r.id ? "" : undefined}
           >
             {r.label}
           </button>
