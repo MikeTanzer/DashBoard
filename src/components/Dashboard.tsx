@@ -145,7 +145,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
         </div>
 
         {/* Row 1 — reach: how much of the market we touch ------------------ */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
+        <div className="grid grid-cols-2 gap-4 max-[640px]:gap-2.5 lg:grid-cols-4 mb-4">
           {/* The count is a live total — without cancellation dates we can't
               rebuild it for a past date, and a rising-only line would be a lie.
               The range drives arrivals, which we CAN compute exactly. */}
@@ -211,7 +211,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
         </div>
 
         {/* Row 2 — economics. Four equal tiles, matching the row above. --- */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+        <div className="grid grid-cols-2 gap-4 max-[640px]:gap-2.5 lg:grid-cols-4 mb-6">
           <RevenuePerCustomer m={m} />
 
           {/* A balance, not a flow: it doesn't move with the time range, so no
@@ -262,6 +262,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               recency={
                 m.consumerRecency.available ? m.consumerRecency.value : undefined
               }
+              recencyByState={m.consumerRecencyByState}
+              stateRecencyUnavailable={m.stateRecencyUnavailable}
               gmvWindowLabel={m.windowLabel}
               gmvUnavailable={m.stateGmvUnavailable}
             />

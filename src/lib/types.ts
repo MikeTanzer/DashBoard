@@ -62,6 +62,17 @@ export interface ConsumerStats {
    * consumer line; omit it and the tooltip says so.
    */
   consumersByState?: Record<string, number>;
+  /**
+   * Optional: purchaser counts per USPS state code, per trailing window —
+   * `{ CA: { "7": 1200, "30": 4100, ... } }`, same window keys as `purchasers`.
+   *
+   * Required to scope the recency breakdown to a single state. It cannot be
+   * derived from `consumersByState` (which is only a head count) or from the
+   * national `purchasers` (which says nothing about where those people are),
+   * so without it a state selection reports what it needs rather than
+   * re-labelling national figures with a state name.
+   */
+  purchasersByState?: Record<string, Record<string, number>>;
 }
 
 /** Window keys the UI knows how to ask for. */

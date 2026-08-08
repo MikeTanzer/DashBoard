@@ -55,6 +55,24 @@ export const CONSUMERS_SQL =
 export const CUSTOMERS_SQL = process.env.PYROTREE_SQL_CUSTOMERS ?? null;
 
 /**
+ * Optional. Consumer counts broken down by state, which is what lets the
+ * recency panel be scoped to a single state on the map.
+ *
+ * Must return one row per platform AND state, with these exact column names:
+ *   platform (text) · state (2-letter code) · tracked (int)
+ *   purchased_7d / _30d / _90d / _180d / _365d / purchased_ever (int)
+ *
+ * Same semantics as CONSUMERS_SQL, just grouped by state as well. This cannot
+ * be derived from the national rollup — that says how many people bought, not
+ * where they are — so without this query a state selection reports what it
+ * needs instead of showing national figures under a state's name.
+ *
+ * Leave PYROTREE_SQL_CONSUMERS_BY_STATE unset and per-state recency is skipped.
+ */
+export const CONSUMERS_BY_STATE_SQL =
+  process.env.PYROTREE_SQL_CONSUMERS_BY_STATE ?? null;
+
+/**
  * Optional. Gross merchandise value — what shoppers spent on our customers'
  * storefronts, which only the platform that processed the orders can know.
  *

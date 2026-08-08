@@ -56,6 +56,7 @@ export interface Bar {
   partial?: boolean;
 }
 
+
 /**
  * One slice of the consumer base, by how recently they last bought.
  *
@@ -145,6 +146,10 @@ export interface DashboardMetrics {
   consumersDormant: Metric<number>;
   /** Exclusive recency slices of the consumer base. */
   consumerRecency: Metric<RecencyBand[]>;
+  /** The same slices scoped to one state, keyed by USPS code. */
+  consumerRecencyByState: Record<string, Metric<RecencyBand[]>>;
+  /** Why per-state recency is missing, when it is. null when it's available. */
+  stateRecencyUnavailable: string | null;
 
   /** Why per-state GMV is missing, when it is. null when it's shown. */
   stateGmvUnavailable: string | null;
@@ -177,6 +182,8 @@ const NEEDS_CASH =
   "Cash on hand is a bank balance, not something derivable from revenue or MRR. Supply it via `cash` in data/network.json or from the admin API, or set STRIPE_SECRET_KEY to pull the Stripe balance (Stripe covers money held there, not your operating account).";
 const NEEDS_DAILY_REVENUE =
   "Day-level revenue needs a source with timestamped transactions. Stripe supplies it automatically once STRIPE_SECRET_KEY is set; the admin API can send a `revenueDaily` array. Monthly totals can't be split into days after the fact.";
+const NEEDS_STATE_RECENCY =
+  "Per-state recency needs the consumer source to break purchasers down by state. Add a `purchasersByState` map to each consumer rollup (see PYROTREE_SQL_CONSUMERS_BY_STATE in src/connectors/queries.ts). It can't be inferred from the national figures — those say how many people bought, not where they are.";
 const NEEDS_REVENUE_HISTORY =
   "Needs at least 2 months of revenue history from Stripe invoices, the admin API, or data/network.json.";
 
@@ -406,6 +413,7 @@ export function computeMetrics(
   };
 
   const bars = windowRows.map(toBar);
+
   const windowSum = sumBy(windowRows, (r) => r.totalCents);
   const windowUsageSum = sumBy(windowRows, (r) => r.usageCents);
 
@@ -498,13 +506,23 @@ export function computeMetrics(
   const pWindow = purchasersFor(range.consumerWindow);
 
   // --- Consumer recency ------------------------------------------------------
-  const recency = ((): Metric<RecencyBand[]> => {
-    if (!hasConsumers) return unavailable(NEEDS_CONSUMERS);
-    if (tracked <= 0) return unavailable(NEEDS_CONSUMERS);
+  /**
+   * Turns cumulative purchaser windows into mutually-exclusive recency slices.
+   *
+   * Factored out so the national view and a single-state view run the exact
+   * same validation and arithmetic — a state breakdown that silently skipped
+   * the cumulative-ordering checks could render negative slices from bad
+   * source data.
+   */
+  const buildBands = (
+    base: number,
+    windowValue: (w: string) => number | null,
+  ): Metric<RecencyBand[]> => {
+    if (base <= 0) return unavailable(NEEDS_CONSUMERS);
 
     const order = ["7", "30", "90", "180", "365", "ever"];
     const present = order
-      .map((w) => ({ w, v: purchasersFor(w) }))
+      .map((w) => ({ w, v: windowValue(w) }))
       .filter((x): x is { w: string; v: number } => x.v !== null);
 
     if (!present.length) {
@@ -523,7 +541,7 @@ export function computeMetrics(
         );
       }
     }
-    if (present[present.length - 1].v > tracked) {
+    if (present[present.length - 1].v > base) {
       return unavailable(
         "More purchasers than tracked consumers — check the consumer query.",
       );
@@ -540,24 +558,74 @@ export function computeMetrics(
         key: cur.w,
         label: bandLabel(prev?.w ?? null, cur.w),
         value,
-        share: value / tracked,
+        share: value / base,
         step: RAMP[Math.min(i, RAMP.length - 1)],
       });
     });
 
-    const never = tracked - present[present.length - 1].v;
+    const never = base - present[present.length - 1].v;
     if (never > 0) {
       bands.push({
         key: "never",
         label: "Never purchased",
         value: never,
-        share: never / tracked,
+        share: never / base,
         step: null,
       });
     }
 
     return bands.length ? available(bands) : unavailable(NEEDS_CONSUMERS);
-  })();
+  };
+
+  const recency = !hasConsumers
+    ? unavailable(NEEDS_CONSUMERS)
+    : buildBands(tracked, purchasersFor);
+
+  /**
+   * The same breakdown, scoped to one state.
+   *
+   * Both halves have to come from the source: the head count from
+   * `consumersByState` and the windows from `purchasersByState`. A state is
+   * only offered when EVERY in-scope platform reports it, for the same reason
+   * `purchasersFor` demands full coverage — a partial sum would undercount the
+   * state while looking like a complete figure.
+   */
+  const stateRecencyUnavailable = !hasConsumers
+    ? NEEDS_CONSUMERS
+    : consumers.every((c) => c.purchasersByState && c.consumersByState)
+      ? null
+      : NEEDS_STATE_RECENCY;
+
+  const consumerRecencyByState: Record<string, Metric<RecencyBand[]>> = {};
+  if (stateRecencyUnavailable === null) {
+    const codes = new Set<string>();
+    for (const c of consumers) {
+      for (const code of Object.keys(c.consumersByState ?? {})) codes.add(code);
+    }
+    for (const code of codes) {
+      const base = consumers.reduce(
+        (a, c) => a + (c.consumersByState?.[code] ?? 0),
+        0,
+      );
+      consumerRecencyByState[code] = buildBands(base, (w) => {
+        // Two different absences here, and conflating them broke every
+        // single-platform state: a platform with NO row for this state simply
+        // doesn't operate there, which is a true zero. A platform that has the
+        // state but omits this window hasn't computed it, which is unknown —
+        // and one unknown makes the whole sum unknown, same rule as the
+        // national windows.
+        let total = 0;
+        for (const c of consumers) {
+          const forState = c.purchasersByState?.[code];
+          if (!forState) continue;
+          const v = forState[w];
+          if (typeof v !== "number") return null;
+          total += v;
+        }
+        return total;
+      });
+    }
+  }
 
   // --- GMV ------------------------------------------------------------------
   // Windowed with the SAME rules as revenue — same grain, same bounds, same
@@ -664,6 +732,8 @@ export function computeMetrics(
     cashAsOf,
 
     consumerRecency: recency,
+    consumerRecencyByState,
+    stateRecencyUnavailable,
     customerCount: hasCustomers
       ? available(customers.length)
       : unavailable(NEEDS_CUSTOMERS),

@@ -9,6 +9,7 @@ import type {
 } from "@/lib/types";
 import { normalizeState } from "@/lib/states";
 import {
+  CONSUMERS_BY_STATE_SQL,
   CONSUMERS_MONGO_COLLECTION,
   CONSUMERS_MONGO_PIPELINE,
   CONSUMERS_SQL,
@@ -218,6 +219,46 @@ export const databaseConnector: Connector = {
         purchasers,
       };
     });
+    // Optional per-state breakdown, folded onto the matching platform rollup.
+    // Attached only when the state query runs, so a platform either carries a
+    // full state map or none at all — a half-populated map would let one state
+    // look empty when it was simply never queried.
+    if (CONSUMERS_BY_STATE_SQL && e !== "mongodb") {
+      const byState = await query(CONSUMERS_BY_STATE_SQL);
+      const perPlatform = new Map<
+        string,
+        { tracked: Record<string, number>; windows: Record<string, Record<string, number>> }
+      >();
+
+      for (const r of byState) {
+        const platform = str(r.platform) || "unassigned";
+        const code = normalizeState(str(r.state));
+        if (!code) continue;
+
+        let entry = perPlatform.get(platform);
+        if (!entry) {
+          entry = { tracked: {}, windows: {} };
+          perPlatform.set(platform, entry);
+        }
+        entry.tracked[code] = num(r.tracked);
+
+        const windows: Record<string, number> = {};
+        for (const w of ["7", "30", "90", "180", "365"]) {
+          const v = r[`purchased_${w}d`];
+          if (v != null) windows[w] = num(v);
+        }
+        if (r.purchased_ever != null) windows.ever = num(r.purchased_ever);
+        entry.windows[code] = windows;
+      }
+
+      for (const c of consumers) {
+        const entry = perPlatform.get(c.platform);
+        if (!entry) continue;
+        c.consumersByState = entry.tracked;
+        c.purchasersByState = entry.windows;
+      }
+    }
+
     if (consumers.length) provides.push("consumers");
 
     let customers: CustomerRecord[] | undefined;

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { RecencyBand, StateCount } from "@/lib/metrics";
+import type { Metric } from "@/lib/types";
 import { ConsumerPie } from "./ConsumerPie";
 import { STATE_NAMES } from "@/lib/states";
 import {
@@ -32,6 +33,13 @@ interface Props {
   gmvUnavailable?: string | null;
   /** Consumer recency, shown as an inset panel over the map's empty corner. */
   recency?: RecencyBand[];
+  /**
+   * The same breakdown per state, keyed by USPS code. Selecting a state on the
+   * map, bars or table swaps the panel over to its entry.
+   */
+  recencyByState?: Record<string, Metric<RecencyBand[]>>;
+  /** Set when the source can't break recency down by state, with the reason. */
+  stateRecencyUnavailable?: string | null;
 }
 
 /**
@@ -101,10 +109,13 @@ export function StatesCard({
   data,
   customersWithoutState,
   recency,
+  recencyByState,
+  stateRecencyUnavailable,
   gmvWindowLabel,
   gmvUnavailable,
 }: Props) {
   const [view, setView] = useState<View>("map");
+  const [rawPicked, setPicked] = useState<string | null>(null);
   const [hover, setHover] = useState<{
     x: number;
     y: number;
@@ -139,6 +150,38 @@ export function StatesCard({
       state,
     });
   };
+
+  /** Clicking the selected state again clears it, so the map is its own toggle. */
+  const pick = (code: string) =>
+    setPicked((cur) => (cur === code ? null : code));
+
+  // Changing the platform filter can drop a state from the data entirely.
+  // Derived rather than cleared in an effect: a selection that isn't in `data`
+  // is simply not active, so there's no render where the chip names a state
+  // the map no longer shows. Switching back to a platform that has the state
+  // restores the selection, which is what you'd want from a filter anyway.
+  const picked = rawPicked && data.some((d) => d.code === rawPicked)
+    ? rawPicked
+    : null;
+
+  /**
+   * What the recency panel renders. A selected state swaps in that state's
+   * breakdown; if the source doesn't carry per-state purchasers, the panel says
+   * so rather than showing national figures under a state's name — which would
+   * be a wrong number, not a missing one.
+   */
+  const panel: {
+    bands?: RecencyBand[];
+    needs?: string;
+  } = !picked
+    ? { bands: recency }
+    : stateRecencyUnavailable
+      ? { needs: stateRecencyUnavailable }
+      : (() => {
+          const m = recencyByState?.[picked];
+          if (!m) return { needs: `No consumer records for ${picked}.` };
+          return m.available ? { bands: m.value } : { needs: m.needs };
+        })();
 
   // A tap opens a tooltip with nothing to move away from, so dismiss on the
   // next tap anywhere outside the card.
@@ -178,13 +221,21 @@ export function StatesCard({
                 bin={bin}
                 onHover={showTip}
                 onLeave={() => setHover(null)}
+                picked={picked}
+                onPick={pick}
               />
               <ScaleLegend bins={bins} />
             </>
           ) : view === "bars" ? (
-            <Bars data={data} onHover={showTip} onLeave={() => setHover(null)} />
+            <Bars
+              data={data}
+              onHover={showTip}
+              onLeave={() => setHover(null)}
+              picked={picked}
+              onPick={pick}
+            />
           ) : (
-            <Table data={data} />
+            <Table data={data} picked={picked} onPick={pick} />
           )}
         </div>
 
@@ -193,14 +244,34 @@ export function StatesCard({
 
           {recency?.length ? (
             <div className="recency-panel" aria-label="Consumer recency">
-              <h3 className="text-[12px] font-bold mb-2">Consumer recency</h3>
-              <ConsumerPie bands={recency} inset />
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <h3 className="text-[12px] font-bold">Consumer recency</h3>
+                {picked ? (
+                  <StateChip
+                    code={picked}
+                    onClear={() => setPicked(null)}
+                  />
+                ) : null}
+              </div>
+
+              {panel.bands?.length ? (
+                <ConsumerPie bands={panel.bands} inset />
+              ) : (
+                <p
+                  className="text-[11px] leading-snug py-2"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  {panel.needs ?? "No consumer data for this state."}
+                </p>
+              )}
+
               <p
                 className="text-[10px] mt-2 leading-snug"
                 style={{ color: "var(--text-muted)" }}
               >
                 Shoppers on our customers&apos; storefronts. Aggregate counts
                 only.
+                {picked ? null : " Select a state to scope this panel."}
               </p>
             </div>
           ) : null}
@@ -275,11 +346,15 @@ function Choropleth({
   bin,
   onHover,
   onLeave,
+  picked,
+  onPick,
 }: {
   byCode: Map<string, StateCount>;
   bin: (n: number) => number;
   onHover: (e: React.PointerEvent | React.MouseEvent, s: StateCount) => void;
   onLeave: () => void;
+  picked: string | null;
+  onPick: (code: string) => void;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -304,6 +379,8 @@ function Choropleth({
               stroke="var(--surface-1)"
               strokeWidth={1}
               strokeLinejoin="round"
+              style={stat ? { cursor: "pointer" } : undefined}
+              onClick={() => (stat ? onPick(code) : undefined)}
               onPointerMove={(e) => (stat ? onHover(e, stat) : undefined)}
               onPointerDown={(e) => (stat ? onHover(e, stat) : undefined)}
               onMouseLeave={onLeave}
@@ -320,6 +397,22 @@ function Choropleth({
             />
           );
         })}
+
+        {/* The selection outline is a separate pass, drawn after every shape.
+            Widening the stroke on the state's own path would let any neighbour
+            rendered later paint over half of it — the states share borders and
+            the fills are opaque. Selected state is outlined rather than
+            recoloured so its fill still reads against the same scale. */}
+        {picked && STATE_PATHS[picked] ? (
+          <path
+            d={STATE_PATHS[picked]}
+            fill="none"
+            stroke="var(--text-primary)"
+            strokeWidth={2.25}
+            strokeLinejoin="round"
+            pointerEvents="none"
+          />
+        ) : null}
 
         {[...byCode.values()].map((stat) => {
           const b = bin(stat.customers);
@@ -398,6 +491,38 @@ function Choropleth({
   );
 }
 
+/**
+ * The active state filter, with its own clear button.
+ *
+ * The X is a real nested <button>, not an onClick on the chip: the chip names
+ * what's being filtered and the X removes it, and collapsing both into one
+ * control would mean the only way to clear a state is to click the thing that
+ * says it's selected.
+ */
+function StateChip({ code, onClear }: { code: string; onClear: () => void }) {
+  const name = STATE_NAMES[code] ?? code;
+  return (
+    <span className="state-chip">
+      {name}
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Clear ${name} — show all states`}
+        title={`Clear ${name}`}
+      >
+        <svg width="9" height="9" viewBox="0 0 9 9" aria-hidden="true">
+          <path
+            d="M1 1l7 7M8 1l-7 7"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+          />
+        </svg>
+      </button>
+    </span>
+  );
+}
+
 function ScaleLegend({ bins }: { bins: Bin[] }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-3">
@@ -451,10 +576,14 @@ function Bars({
   data,
   onHover,
   onLeave,
+  picked,
+  onPick,
 }: {
   data: StateCount[];
   onHover: (e: React.PointerEvent | React.MouseEvent, s: StateCount) => void;
   onLeave: () => void;
+  picked: string | null;
+  onPick: (code: string) => void;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const measured = useElementWidth(boxRef, 900);
@@ -505,6 +634,8 @@ function Bars({
           return (
             <g
               key={d.code}
+              style={{ cursor: "pointer" }}
+              onClick={() => onPick(d.code)}
               onPointerMove={(e) => onHover(e, d)}
               onPointerDown={(e) => onHover(e, d)}
               onMouseLeave={onLeave}
@@ -514,20 +645,29 @@ function Bars({
                 y={i * rowH}
                 width={VB_W}
                 height={rowH}
-                fill="transparent"
+                rx={6}
+                fill={
+                  picked === d.code ? "var(--surface-2)" : "transparent"
+                }
               />
               <text
                 x={labelW - 10}
                 y={i * rowH + rowH / 2 + 4}
                 textAnchor="end"
                 fontSize={12.5}
-                fill="var(--text-secondary)"
+                fontWeight={picked === d.code ? 700 : 400}
+                fill={
+                  picked === d.code
+                    ? "var(--text-primary)"
+                    : "var(--text-secondary)"
+                }
               >
                 {d.name}
               </text>
               <path
                 d={roundedRightBar(labelW, y, bw, barH, 4)}
                 fill="var(--series-1)"
+                opacity={picked && picked !== d.code ? 0.45 : 1}
               />
               <text
                 x={labelW + bw + 8}
@@ -572,7 +712,15 @@ function Bars({
   );
 }
 
-function Table({ data }: { data: StateCount[] }) {
+function Table({
+  data,
+  picked,
+  onPick,
+}: {
+  data: StateCount[];
+  picked: string | null;
+  onPick: (code: string) => void;
+}) {
   return (
     <div className="mt-3 max-h-[420px] overflow-y-auto">
       <table className="dataview">
@@ -585,7 +733,22 @@ function Table({ data }: { data: StateCount[] }) {
         </thead>
         <tbody>
           {data.map((d) => (
-            <tr key={d.code}>
+            // The row itself is the control. A <button> in the first cell
+            // would only make the state's name clickable, and the obvious
+            // thing to click for "show me this state" is the row.
+            <tr
+              key={d.code}
+              onClick={() => onPick(d.code)}
+              aria-selected={picked === d.code}
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onPick(d.code);
+                }
+              }}
+              className="row-pick"
+            >
               <td>{d.name}</td>
               <td className="num">{fullNumber(d.customers)}</td>
               <td className="num">{money(d.mrrCents)}</td>

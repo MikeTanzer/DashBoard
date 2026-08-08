@@ -346,21 +346,34 @@ body {
    right column holding the view toggle above the recency panel. The right
    column lives outside the view switch so it doesn't shift when you change
    between Map, Bars and Table. Below 1080px it stacks under the content. */
+/* Stacked (phone / tablet): view toggle, then the chart, then the recency
+   panel. The toggle and the panel share one <aside>, so column-reverse used to
+   drag BOTH above the chart — you picked a view and then scrolled past a pie
+   chart to reach it. display:contents dissolves the aside at this width so its
+   two children become direct flex items and can be ordered independently; the
+   aside re-forms as a real column at 1080px. */
 .states-layout {
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
   gap: 16px;
   margin-top: 12px;
 }
 
 .states-main {
   min-width: 0;
+  order: 2;
 }
 
 .states-side {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: contents;
+}
+
+.states-side > .seg {
+  order: 1;
+}
+
+.states-side > .recency-panel {
+  order: 3;
 }
 
 /* The view toggle spans the column so it lines up with the panel beneath it —
@@ -390,11 +403,71 @@ body {
   }
   .states-main {
     flex: 1;
+    /* Back to source order — the aside is a single item again here, and a
+       leftover order:2 would push the chart to the right of it. */
+    order: 0;
   }
   .states-side {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
     width: 268px;
     flex-shrink: 0;
   }
+  .states-side > .seg,
+  .states-side > .recency-panel {
+    order: 0;
+  }
+}
+
+/* The active state filter beside "Consumer recency", with its own clear X. */
+.state-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 2px 5px 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.state-chip button {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.state-chip button:hover {
+  background: var(--border);
+  color: var(--text-primary);
+}
+
+/* Clickable table rows in the states view. */
+.row-pick {
+  cursor: pointer;
+}
+
+.row-pick:hover td {
+  background: var(--surface-2);
+}
+
+.row-pick[aria-selected="true"] td {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+.row-pick:focus-visible {
+  outline: 2px solid var(--focus, var(--text-primary));
+  outline-offset: -2px;
 }
 
 /* --- Type ------------------------------------------------------------------ */

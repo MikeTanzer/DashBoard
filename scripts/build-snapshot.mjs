@@ -47,6 +47,7 @@ const consumers = (raw.consumers ?? []).map((c) => {
     tracked: c.tracked ?? 0,
     purchasers,
     consumersByState: c.consumersByState,
+    purchasersByState: c.purchasersByState,
   };
 });
 

@@ -301,7 +301,60 @@ function makeConsumerRollup(platform, tracked, rate30, stateWeights) {
     throw new Error(`${platform}: consumersByState sums to ${sum}, expected ${tracked}`);
   }
 
-  return { platform, tracked, purchasers, consumersByState };
+  // Purchasers per state, per window. Split with the SAME weights as the head
+  // count, so a state's purchase rate matches the platform's — the demo isn't
+  // trying to model regional behaviour, only to be internally consistent.
+  //
+  // The largest state absorbs the rounding remainder in every window, exactly
+  // as `tracked` is split above, which keeps each window summing to its
+  // national figure. Monotonicity survives because Math.round is monotonic and
+  // the remainder (bounded by half a unit per state, so ~10 across 19 states)
+  // is far smaller than the gap between consecutive windows.
+  const purchasersByState = {};
+  for (const [code] of entries) purchasersByState[code] = {};
+
+  for (const w of [7, 30, 90, 180, 365, "ever"]) {
+    const total = purchasers[w];
+    let remaining = total;
+    entries.forEach(([code, weight], i) => {
+      const share =
+        i === entries.length - 1
+          ? remaining
+          : Math.round(total * (weight / totalWeight));
+      purchasersByState[code][w] = share;
+      remaining -= share;
+    });
+  }
+
+  // Assert rather than trust the arithmetic above: a non-cumulative or
+  // over-capacity state series renders as a negative pie slice, and the
+  // dashboard would (correctly) refuse to draw it. Fail the build instead.
+  for (const [code] of entries) {
+    const series = purchasersByState[code];
+    const seq = [7, 30, 90, 180, 365, "ever"];
+    for (let i = 1; i < seq.length; i++) {
+      if (series[seq[i]] < series[seq[i - 1]]) {
+        throw new Error(
+          `${platform}/${code}: purchasersByState not monotonic at ${seq[i]} (${series[seq[i]]} < ${series[seq[i - 1]]})`,
+        );
+      }
+    }
+    if (series.ever > consumersByState[code]) {
+      throw new Error(
+        `${platform}/${code}: ${series.ever} purchasers but only ${consumersByState[code]} tracked consumers`,
+      );
+    }
+  }
+  for (const w of [7, 30, 90, 180, 365, "ever"]) {
+    const s = entries.reduce((a, [code]) => a + purchasersByState[code][w], 0);
+    if (s !== purchasers[w]) {
+      throw new Error(
+        `${platform}: purchasersByState[${w}] sums to ${s}, expected ${purchasers[w]}`,
+      );
+    }
+  }
+
+  return { platform, tracked, purchasers, consumersByState, purchasersByState };
 }
 
 // -- GMV ----------------------------------------------------------------------
