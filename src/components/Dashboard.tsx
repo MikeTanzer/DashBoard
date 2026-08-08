@@ -303,6 +303,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               }
               recencyByState={m.consumerRecencyByState}
               stateRecencyUnavailable={m.stateRecencyUnavailable}
+              tenure={m.customerTenure.available ? m.customerTenure.value : undefined}
+              tenureByState={m.customerTenureByState}
               gmvWindowLabel={m.windowLabel}
               gmvUnavailable={m.stateGmvUnavailable}
               windowMonthCount={m.windowMonthCount}

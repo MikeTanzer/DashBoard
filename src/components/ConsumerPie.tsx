@@ -24,10 +24,13 @@ type View = "chart" | "table";
 export function ConsumerPie({
   bands,
   inset = false,
+  totalLabel = "Tracked",
 }: {
   bands: RecencyBand[];
   /** Compact form for the map corner: smaller ring, tighter legend, no toggle. */
   inset?: boolean;
+  /** What the centre total counts — "Tracked" shoppers, or "Customers". */
+  totalLabel?: string;
 }) {
   const [view, setView] = useState<View>("chart");
   const [active, setActive] = useState<string | null>(null);
@@ -152,7 +155,7 @@ export function ConsumerPie({
                 textTransform: "uppercase",
               }}
             >
-              Tracked
+              {totalLabel}
             </text>
           </svg>
 

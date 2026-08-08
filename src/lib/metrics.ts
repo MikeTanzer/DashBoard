@@ -182,6 +182,10 @@ export interface DashboardMetrics {
   consumerRecency: Metric<RecencyBand[]>;
   /** The same slices scoped to one state, keyed by USPS code. */
   consumerRecencyByState: Record<string, Metric<RecencyBand[]>>;
+  /** The customer-side counterpart: how long each customer has been with us. */
+  customerTenure: Metric<RecencyBand[]>;
+  /** Customer tenure scoped to one state, keyed by USPS code. */
+  customerTenureByState: Record<string, Metric<RecencyBand[]>>;
   /** Why per-state recency is missing, when it is. null when it's available. */
   stateRecencyUnavailable: string | null;
 
@@ -203,6 +207,21 @@ export interface DashboardMetrics {
   consumersPurchased180d: Metric<number>;
   consumerActivation30d: Metric<number>;
 }
+
+/**
+ * Tenure buckets, newest first so the pie reads the same direction as consumer
+ * recency (most recent nearest the top). The last band has no upper bound.
+ */
+const TENURE_BANDS: { label: string; maxDays: number | null }[] = [
+  { label: "Joined in the last 30 days", maxDays: 30 },
+  { label: "1–3 months ago", maxDays: 90 },
+  { label: "3–6 months ago", maxDays: 180 },
+  { label: "6–12 months ago", maxDays: 365 },
+  { label: "1–2 years ago", maxDays: 730 },
+  { label: "Over 2 years ago", maxDays: null },
+];
+
+const TENURE_RAMP = [600, 500, 400, 300, 200, 100];
 
 const NEEDS_CUSTOMERS =
   "Connect Stripe, the internal admin API, or add customers to data/network.json.";
@@ -680,6 +699,59 @@ export function computeMetrics(
     }
   }
 
+  // --- Customer tenure ------------------------------------------------------
+  /**
+   * The customer-side counterpart to consumer recency.
+   *
+   * Recency asks "how long since they last bought", which only makes sense for
+   * shoppers — a customer is on a subscription and doesn't buy in windows. The
+   * equivalent question for customers is how long they've been with us, which
+   * `startedAt` answers exactly. Same mutually-exclusive band shape, so the
+   * same pie renders either one.
+   */
+  const buildTenure = (list: CustomerRecord[]): Metric<RecencyBand[]> => {
+    if (!list.length) return unavailable(NEEDS_CUSTOMERS);
+    if (!list.every((c) => c.startedAt)) {
+      return unavailable(
+        "Needs a start date on every customer. Stripe supplies it from the subscription; otherwise add `startedAt` to each record.",
+      );
+    }
+
+    const nowMs = Date.parse(`${todayKey()}T00:00:00Z`);
+    const ageDays = (d: string) =>
+      Math.floor((nowMs - Date.parse(`${d}T00:00:00Z`)) / 86_400_000);
+
+    const counts = TENURE_BANDS.map(() => 0);
+    for (const c of list) {
+      const age = ageDays(c.startedAt as string);
+      let i = TENURE_BANDS.findIndex(
+        (b) => b.maxDays === null || age <= b.maxDays,
+      );
+      if (i < 0) i = TENURE_BANDS.length - 1;
+      counts[i]++;
+    }
+
+    const total = list.length;
+    const bands: RecencyBand[] = TENURE_BANDS.map((b, i) => ({
+      key: `t${i}`,
+      label: b.label,
+      value: counts[i],
+      share: counts[i] / total,
+      step: TENURE_RAMP[Math.min(i, TENURE_RAMP.length - 1)],
+    })).filter((b) => b.value > 0);
+
+    return bands.length ? available(bands) : unavailable(NEEDS_CUSTOMERS);
+  };
+
+  const customerTenure = buildTenure(customers);
+  const customerTenureByState: Record<string, Metric<RecencyBand[]>> = {};
+  for (const s of stateList) {
+    if (s.customers <= 0) continue;
+    customerTenureByState[s.code] = buildTenure(
+      customers.filter((c) => c.state === s.code),
+    );
+  }
+
   // --- GMV ------------------------------------------------------------------
   // Windowed with the SAME rules as revenue — same grain, same bounds, same
   // slice — so the two figures always describe the identical period.
@@ -954,6 +1026,8 @@ export function computeMetrics(
     tileSeries,
     consumerRecency: recency,
     consumerRecencyByState,
+    customerTenure,
+    customerTenureByState,
     stateRecencyUnavailable,
     customerCount: hasCustomers
       ? available(customers.length)

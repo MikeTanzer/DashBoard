@@ -43,6 +43,10 @@ interface Props {
   recencyByState?: Record<string, Metric<RecencyBand[]>>;
   /** Set when the source can't break recency down by state, with the reason. */
   stateRecencyUnavailable?: string | null;
+  /** Customer-side counterpart to recency: how long each has been a customer. */
+  tenure?: RecencyBand[];
+  /** Tenure scoped to one state, keyed by USPS code. */
+  tenureByState?: Record<string, Metric<RecencyBand[]>>;
   /** Calendar months the window covers, for the per-month tooltip rows. */
   windowMonthCount?: number;
 }
@@ -116,6 +120,8 @@ export function StatesCard({
   recency,
   recencyByState,
   stateRecencyUnavailable,
+  tenure,
+  tenureByState,
   gmvWindowLabel,
   gmvUnavailable,
   windowMonthCount = 0,
@@ -213,18 +219,26 @@ export function StatesCard({
    * so rather than showing national figures under a state's name — which would
    * be a wrong number, not a missing one.
    */
+  const isCustomerDim = activeDim === "customers";
+
   const panel: {
     bands?: RecencyBand[];
     needs?: string;
   } = !picked
-    ? { bands: recency }
-    : stateRecencyUnavailable
-      ? { needs: stateRecencyUnavailable }
-      : (() => {
-          const m = recencyByState?.[picked];
-          if (!m) return { needs: `No consumer records for ${picked}.` };
-          return m.available ? { bands: m.value } : { needs: m.needs };
-        })();
+    ? { bands: isCustomerDim ? tenure : recency }
+    : isCustomerDim
+      ? (() => {
+          const t = tenureByState?.[picked];
+          if (!t) return { needs: `No customers in ${picked}.` };
+          return t.available ? { bands: t.value } : { needs: t.needs };
+        })()
+      : stateRecencyUnavailable
+        ? { needs: stateRecencyUnavailable }
+        : (() => {
+            const m = recencyByState?.[picked];
+            if (!m) return { needs: `No consumer records for ${picked}.` };
+            return m.available ? { bands: m.value } : { needs: m.needs };
+          })();
 
   // A tap opens a tooltip with nothing to move away from, so dismiss on the
   // next tap anywhere outside the card.
@@ -336,10 +350,15 @@ export function StatesCard({
 
           <ViewToggle view={view} onChange={setView} />
 
-          {recency?.length ? (
-            <div className="recency-panel" aria-label="Consumer recency">
+          {(isCustomerDim ? tenure?.length : recency?.length) ? (
+            <div
+              className="recency-panel"
+              aria-label={isCustomerDim ? "Customer tenure" : "Consumer recency"}
+            >
               <div className="flex items-start justify-between gap-2 mb-2">
-                <h3 className="text-[12px] font-bold">Consumer recency</h3>
+                <h3 className="text-[12px] font-bold">
+                  {isCustomerDim ? "Customer tenure" : "Consumer recency"}
+                </h3>
                 {picked ? (
                   <StateChip
                     code={picked}
@@ -349,13 +368,20 @@ export function StatesCard({
               </div>
 
               {panel.bands?.length ? (
-                <ConsumerPie bands={panel.bands} inset />
+                <ConsumerPie
+                  bands={panel.bands}
+                  inset
+                  totalLabel={isCustomerDim ? "Customers" : "Tracked"}
+                />
               ) : (
                 <p
                   className="text-[11px] leading-snug py-2"
                   style={{ color: "var(--text-muted)" }}
                 >
-                  {panel.needs ?? "No consumer data for this state."}
+                  {panel.needs ??
+                    (isCustomerDim
+                      ? "No customers in this state."
+                      : "No consumer data for this state.")}
                 </p>
               )}
 
@@ -363,8 +389,9 @@ export function StatesCard({
                 className="text-[10px] mt-2 leading-snug"
                 style={{ color: "var(--text-muted)" }}
               >
-                Shoppers on our customers&apos; storefronts. Aggregate counts
-                only.
+                {isCustomerDim
+                  ? "How long each customer has been with us."
+                  : "Shoppers on our customers' storefronts. Aggregate counts only."}
                 {picked ? null : " Select a state to scope this panel."}
               </p>
             </div>
