@@ -21,6 +21,7 @@ import {
   money,
 } from "@/lib/format";
 import { useElementWidth } from "@/lib/useElementWidth";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 
 type View = "map" | "bars" | "table";
 
@@ -106,6 +107,17 @@ function makeBins(values: number[]): Bin[] {
     lo = up + 1;
   }
   return bins;
+}
+
+/** What a map label prints for a state under the active dimension. */
+function labelValue(
+  stat: StateCount,
+  dim: Dimension,
+  valueOf: (d: StateCount) => number,
+): string {
+  return dim === "customers"
+    ? String(stat.customers)
+    : compactNumber(valueOf(stat));
 }
 
 /** The ramp step number for bin `i` of `count`. */
@@ -517,15 +529,87 @@ function Choropleth({
   picked: string | null;
   onPick: (code: string) => void;
 }) {
+  /**
+   * Extra width on the right for the margin labels of states too small to hold
+   * one. They used to be drawn at x=906 anchored "end", i.e. extending LEFT
+   * into the map — New Jersey's label landed squarely on Massachusetts, which
+   * reads as New Jersey being mislabelled somewhere near New York. The gutter
+   * gives them somewhere to live that isn't on top of Maine and Massachusetts;
+   * the projection is untouched, the viewBox is just wider than the artwork.
+   */
+  // Reclaimed on phones, where the labels are hidden altogether — an empty
+  // 84px column would just shrink the map by 8% for nothing.
+  const GUTTER = useMediaQuery("(max-width: 640px)") ? 0 : 84;
+  const VB_W = MAP_WIDTH + GUTTER;
+
+  /**
+   * Which labels can be drawn without landing on one already placed.
+   *
+   * Values are wide in the consumer view — "501.4K" against a customer count
+   * of "42" — so a label that fits inside its state when counting customers
+   * spills across two neighbours when counting shoppers. Biggest values are
+   * placed first, then each candidate falls back to its code alone, then drops
+   * out entirely. Widths are estimated from the glyph count because nothing is
+   * measurable before the first paint; the factor is deliberately generous.
+   */
+  const plan = (() => {
+    const boxes: { x: number; y: number; w: number; h: number }[] = [];
+    const hits = (b: { x: number; y: number; w: number; h: number }) =>
+      boxes.some(
+        (p) =>
+          b.x < p.x + p.w && p.x < b.x + b.w && b.y < p.y + p.h && p.y < b.y + b.h,
+      );
+    const width = (text: string, size: number) => text.length * size * 0.63;
+
+    const result = new Map<string, { showValue: boolean; show: boolean }>();
+
+    // Margin labels claim their column first — they have nowhere else to go.
+    for (const stat of byCode.values()) {
+      if (ROOMY.has(stat.code)) continue;
+      const o = OUTSET_LABEL_POS[stat.code];
+      if (!o) continue;
+      const text = `${stat.code} ${labelValue(stat, dim, valueOf)}`;
+      const x = o[0] > MAP_WIDTH / 2 ? MAP_WIDTH + 10 : o[0];
+      boxes.push({ x, y: o[1] - 11, w: width(text, 12), h: 15 });
+    }
+
+    for (const stat of [...byCode.values()].sort(
+      (a, b) => valueOf(b) - valueOf(a),
+    )) {
+      if (!ROOMY.has(stat.code)) continue;
+      const pos = STATE_LABEL_POS[stat.code];
+      if (!pos) continue;
+
+      const codeW = width(stat.code, 13);
+      const valW = width(labelValue(stat, dim, valueOf), 12);
+      const pairW = Math.max(codeW, valW);
+
+      const pair = { x: pos[0] - pairW / 2, y: pos[1] - 14, w: pairW, h: 29 };
+      if (!hits(pair)) {
+        boxes.push(pair);
+        result.set(stat.code, { showValue: true, show: true });
+        continue;
+      }
+      const codeOnly = { x: pos[0] - codeW / 2, y: pos[1] - 14, w: codeW, h: 16 };
+      if (!hits(codeOnly)) {
+        boxes.push(codeOnly);
+        result.set(stat.code, { showValue: false, show: true });
+        continue;
+      }
+      result.set(stat.code, { showValue: false, show: false });
+    }
+    return result;
+  })();
+
   return (
     <div className="overflow-x-auto">
       <svg
-        viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
+        viewBox={`0 0 ${VB_W} ${MAP_HEIGHT}`}
         width="100%"
         className="chart-map"
-        style={{ maxWidth: MAP_WIDTH }}
+        style={{ maxWidth: VB_W }}
         role="img"
-        aria-label="Map of the United States, states shaded by customer count"
+        aria-label={`Map of the United States, states shaded by ${dim} count`}
       >
         {/* Shapes first, labels after, so no neighbour paints over a label. */}
         {Object.entries(STATE_PATHS).map(([code, d]) => {
@@ -582,11 +666,13 @@ function Choropleth({
 
           // Big enough to hold the label — set it straight on the shape.
           if (ROOMY.has(stat.code)) {
+            const p = plan.get(stat.code);
+            if (!p?.show) return null;
             return (
               <g key={stat.code} className="map-label" pointerEvents="none">
                 <text
                   x={pos[0]}
-                  y={pos[1] - 2}
+                  y={p.showValue ? pos[1] - 3 : pos[1] + 4}
                   textAnchor="middle"
                   fontSize={13}
                   fontWeight={600}
@@ -594,16 +680,18 @@ function Choropleth({
                 >
                   {stat.code}
                 </text>
-                <text
-                  x={pos[0]}
-                  y={pos[1] + 12}
-                  textAnchor="middle"
-                  fontSize={12}
-                  fill={ink(b)}
-                  opacity={0.85}
-                >
-                  {dim === "customers" ? stat.customers : compactNumber(valueOf(stat))}
-                </text>
+                {p.showValue ? (
+                  <text
+                    x={pos[0]}
+                    y={pos[1] + 12}
+                    textAnchor="middle"
+                    fontSize={12}
+                    fill={ink(b)}
+                    opacity={0.85}
+                  >
+                    {labelValue(stat, dim, valueOf)}
+                  </text>
+                ) : null}
               </g>
             );
           }
@@ -611,31 +699,32 @@ function Choropleth({
           // Too small — label in the margin, joined by a leader line.
           const out = OUTSET_LABEL_POS[stat.code];
           if (!out) return null;
-          const leftOfLabel = out[0] > MAP_WIDTH / 2;
+          // Right-hand labels live in the gutter and read outward. They used to
+          // be anchored "end" here, which pushed the text back over the map.
+          const inGutter = out[0] > MAP_WIDTH / 2;
+          const textX = inGutter ? MAP_WIDTH + 10 : out[0];
           return (
             <g key={stat.code} className="map-label" pointerEvents="none">
               <line
                 x1={pos[0]}
                 y1={pos[1]}
-                x2={out[0] + (leftOfLabel ? -6 : 6)}
+                x2={inGutter ? MAP_WIDTH + 4 : out[0] + 6}
                 y2={out[1] - 4}
                 stroke="var(--axis)"
                 strokeWidth={1}
               />
               <circle cx={pos[0]} cy={pos[1]} r={2} fill="var(--axis)" />
               <text
-                x={out[0]}
+                x={textX}
                 y={out[1]}
-                textAnchor={leftOfLabel ? "end" : "start"}
+                textAnchor="start"
                 fontSize={12}
                 fill="var(--text-secondary)"
               >
                 <tspan fontWeight={600} fill="var(--text-primary)">
                   {stat.code}
                 </tspan>
-                <tspan dx={4}>
-                  {dim === "customers" ? stat.customers : compactNumber(valueOf(stat))}
-                </tspan>
+                <tspan dx={4}>{labelValue(stat, dim, valueOf)}</tspan>
               </text>
             </g>
           );
