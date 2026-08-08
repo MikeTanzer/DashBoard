@@ -99,10 +99,18 @@ async function query(sql: string): Promise<Row[]> {
     const Client = named<new (config: object) => PgClient>(pg, "Client");
     const client = new Client({
       connectionString: url(),
+      // Verify the server certificate by default. This used to pass
+      // `rejectUnauthorized: false` unconditionally, which negotiates TLS and
+      // then accepts any certificate presented — encrypting the connection
+      // while leaving it open to an active man-in-the-middle, on a link
+      // carrying customer and revenue data. Managed Postgres (RDS, Cloud SQL,
+      // Neon, Supabase) all present certificates that verify normally.
+      // A replica with a self-signed certificate needs the opt-out, and the
+      // variable is named so that choice is visible in the environment.
       ssl:
         process.env.PYROTREE_DB_SSL === "0"
           ? undefined
-          : { rejectUnauthorized: false },
+          : { rejectUnauthorized: process.env.PYROTREE_DB_SSL_INSECURE !== "1" },
       statement_timeout: 20_000,
     });
     await client.connect();

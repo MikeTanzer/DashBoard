@@ -26,7 +26,9 @@ export interface BucketSpec {
 export const BUCKETS: BucketSpec[] = [
   { id: "day", label: "Daily", minDays: 0, minRange: "1m" },
   { id: "month", label: "Monthly", minDays: 80, minRange: "3m" },
-  { id: "quarter", label: "Quarterly", minDays: 250, minRange: "12m" },
+  // ~2 quarters. Was 250, which made YTD fall back to 12M from January until
+  // September — eight months is three quarters and plots perfectly well.
+  { id: "quarter", label: "Quarterly", minDays: 170, minRange: "12m" },
   { id: "year", label: "Annually", minDays: 600, minRange: "all" },
 ];
 
@@ -85,7 +87,15 @@ export interface RangeSpec {
   to?: string;
 }
 
-export type RangeId = "1w" | "1m" | "3m" | "6m" | "12m" | "all" | "custom";
+export type RangeId =
+  | "1w"
+  | "1m"
+  | "3m"
+  | "6m"
+  | "12m"
+  | "ytd"
+  | "all"
+  | "custom";
 
 export const RANGES: RangeSpec[] = [
   { id: "1w", label: "1W", grain: "day", count: 7, window: "last 7 days", days: 7, consumerWindow: "7" },
@@ -93,8 +103,52 @@ export const RANGES: RangeSpec[] = [
   { id: "3m", label: "3M", grain: "month", count: 3, window: "last 3 months", days: 91, consumerWindow: "90" },
   { id: "6m", label: "6M", grain: "month", count: 6, window: "last 6 months", days: 182, consumerWindow: "180" },
   { id: "12m", label: "12M", grain: "month", count: 12, window: "last 12 months", days: 365, consumerWindow: "365" },
+  // YTD's real bounds depend on today's date, so this entry exists only to
+  // render the button — readRange() swaps in the computed spec.
+  { id: "ytd", label: "YTD", grain: "month", count: Infinity, window: "year to date", days: 365, consumerWindow: "365" },
   { id: "all", label: "All", grain: "month", count: Infinity, window: "all time", days: Infinity, consumerWindow: "ever" },
 ];
+
+/** Nearest window the source actually computes, for a span of `days`. */
+function nearestConsumerWindow(days: number): ConsumerWindow {
+  return days <= 14
+    ? "7"
+    : days <= 60
+      ? "30"
+      : days <= 135
+        ? "90"
+        : days <= 270
+          ? "180"
+          : "365";
+}
+
+/**
+ * January 1st of the current year through today.
+ *
+ * Computed on every read rather than frozen at module load: a dashboard left
+ * open across midnight — or across New Year — would otherwise keep reporting
+ * yesterday's window. Bounded by explicit dates, like a custom range, so the
+ * whole slicing path is shared.
+ */
+export function ytdRange(): RangeSpec {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const from = `${year}-01-01`;
+  const to = now.toISOString().slice(0, 10);
+  const days = daysBetween(from, to);
+
+  return {
+    id: "ytd",
+    label: "YTD",
+    grain: days <= 70 ? "day" : "month",
+    count: Infinity,
+    window: `year to date (${year})`,
+    days,
+    consumerWindow: nearestConsumerWindow(days),
+    from,
+    to,
+  };
+}
 
 /**
  * The window as a trailing phrase: "in the last 3 months" / "all time".
@@ -102,6 +156,17 @@ export const RANGES: RangeSpec[] = [
  */
 export function windowPhrase(range: RangeSpec): string {
   return range.window === "all time" ? "all time" : `in the ${range.window}`;
+}
+
+/**
+ * How to name the comparison period. "the 3 months before" works for a
+ * trailing window; "year to date" and explicit dates have no natural
+ * equivalent, so those fall back to a neutral phrase.
+ */
+export function priorPhrase(range: RangeSpec): string {
+  return range.window.startsWith("last ")
+    ? `the ${range.window.replace("last ", "")} before`
+    : "the period before";
 }
 
 export const DEFAULT_RANGE: RangeId = "3m";
@@ -130,8 +195,7 @@ export function customRange(from: string, to: string): RangeSpec | null {
   const days = daysBetween(from, to);
   const dayGrain = days <= 70;
 
-  const nearest: ConsumerWindow =
-    days <= 14 ? "7" : days <= 60 ? "30" : days <= 135 ? "90" : days <= 270 ? "180" : "365";
+  const nearest = nearestConsumerWindow(days);
 
   return {
     id: "custom",
@@ -156,6 +220,7 @@ export function readRange(
   from?: string,
   to?: string,
 ): RangeSpec {
+  if (raw === "ytd") return ytdRange();
   if (raw === "custom" && from && to) {
     const custom = customRange(from, to);
     if (custom) return custom;

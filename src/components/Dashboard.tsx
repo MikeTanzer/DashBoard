@@ -2,7 +2,12 @@
 
 import { useSearchParams } from "next/navigation";
 import { computeMetrics, platformBreakdown } from "@/lib/metrics";
-import { readRange, resolveView, windowPhrase } from "@/lib/range";
+import {
+  priorPhrase,
+  readRange,
+  resolveView,
+  windowPhrase,
+} from "@/lib/range";
 import type { Snapshot } from "@/lib/types";
 import {
   compactMoney,
@@ -126,8 +131,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               annualRunRateCents={
                 m.annualRunRate.available ? m.annualRunRate.value : 0
               }
-              range={range}
               bucket={bucket}
+              windowLabel={m.windowLabel}
               scopeLabel={scopeLabel}
               unavailableReason={m.bars.available ? undefined : m.bars.needs}
             />
@@ -229,7 +234,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               magnitude above our own revenue, so the label and the take-rate
               hint both work to keep the two from being read as the same thing. */}
           <StatTile
-            label={`GMV · ${range.window}`}
+            label={`GMV · ${m.windowLabel}`}
             metric={m.gmvWindow}
             format={(v) => compactMoney(v)}
             hint={
@@ -243,7 +248,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             label="Revenue change"
             metric={m.revenueChange}
             format={(v) => `${v >= 0 ? "+" : ""}${percent(v, 1)}`}
-            hint={`Complete periods only · vs the ${range.window.replace("last ", "")} before`}
+            hint={`Complete periods only · vs ${priorPhrase(range)}`}
           />
         </div>
 
@@ -257,7 +262,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               recency={
                 m.consumerRecency.available ? m.consumerRecency.value : undefined
               }
-              gmvWindowLabel={range.window}
+              gmvWindowLabel={m.windowLabel}
               gmvUnavailable={m.stateGmvUnavailable}
             />
           ) : (

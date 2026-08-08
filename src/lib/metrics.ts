@@ -113,6 +113,13 @@ export interface DashboardMetrics {
   annualRunRate: Metric<number>;
 
   // --- Scoped to the selected time range ---------------------------------
+  /**
+   * What the window ACTUALLY covers, which can differ from the button pressed.
+   * Quarter and year boundaries don't align to a trailing month count — "last
+   * 6 months" bucketed quarterly is the last two quarters, i.e. five months —
+   * so the label has to describe the buckets, not the button.
+   */
+  windowLabel: string;
   /** The columns the chart plots for this range. */
   bars: Metric<Bar[]>;
   /** Sum of `bars` — the headline figure. */
@@ -302,19 +309,79 @@ export function computeMetrics(
       ? months
       : rollUpMonths(months, bucket);
 
-  // A custom range is bounded by explicit dates; the presets by a trailing
-  // count. Both end up as one contiguous slice, so everything downstream is
-  // identical either way.
-  const inCustom = (r: MonthRevenue | DayRevenue): boolean => {
-    if (!range.from || !range.to) return true;
-    const key = "date" in r ? r.date : r.month;
-    // Month keys compare against the month portion of the bounds.
-    return key >= range.from.slice(0, key.length) && key <= range.to.slice(0, key.length);
+  /**
+   * The span of months a row covers, as inclusive "YYYY-MM" bounds.
+   *
+   * Quarter and year keys ("2026-Q2", "2026") don't compare against a date
+   * bound as plain strings — "2026-Q2" sorts ABOVE "2026-08" because "Q" beats
+   * any digit, so a naive prefix comparison silently excluded every quarter.
+   */
+  const monthSpan = (key: string): { start: string; end: string } => {
+    if (key.includes("-Q")) {
+      const [y, q] = key.split("-Q");
+      const first = (Number(q) - 1) * 3 + 1;
+      return {
+        start: `${y}-${String(first).padStart(2, "0")}`,
+        end: `${y}-${String(first + 2).padStart(2, "0")}`,
+      };
+    }
+    if (key.length === 4) return { start: `${key}-01`, end: `${key}-12` };
+    return { start: key, end: key };
   };
 
-  const bounded = range.from && range.to ? source.filter(inCustom) : source;
-  const take = range.count === Infinity ? bounded.length : range.count;
+  // A bounded range (custom, YTD) filters by explicit dates; the presets take a
+  // trailing count. Both end as one contiguous slice, so everything downstream
+  // is identical either way.
+  const inBounds = (r: MonthRevenue | DayRevenue): boolean => {
+    if (!range.from || !range.to) return true;
+    if ("date" in r) return r.date >= range.from && r.date <= range.to;
+    // A bucket counts as in-window if it OVERLAPS the bounds at all —
+    // requiring full containment would drop the quarter the range ends inside.
+    const span = monthSpan(r.month);
+    return (
+      span.end >= range.from.slice(0, 7) && span.start <= range.to.slice(0, 7)
+    );
+  };
+
+  const bounded = range.from && range.to ? source.filter(inBounds) : source;
+
+  /**
+   * `range.count` is a number of MONTHS (or days). Once the rows are quarters
+   * or years, slicing by it directly takes far too many — "last 6 months" on a
+   * quarterly chart was returning six quarters, i.e. the whole 12-month series
+   * under a 6-month label. Convert to the bucket's own unit.
+   */
+  const take =
+    range.count === Infinity
+      ? bounded.length
+      : bucket === "quarter"
+        ? Math.max(1, Math.ceil(range.count / 3))
+        : bucket === "year"
+          ? Math.max(1, Math.ceil(range.count / 12))
+          : range.count;
+
   const windowRows = bounded.slice(-take);
+
+  /**
+   * Every calendar month the plotted window covers, expanded from its buckets.
+   * Anything that needs to line up with the chart by month (per-state GMV, the
+   * GMV total) reads this rather than re-deriving the bucket maths.
+   */
+  const windowMonths = new Set<string>();
+  for (const r of windowRows) {
+    if ("date" in r) continue;
+    const span = monthSpan(r.month);
+    const [sy, sm] = span.start.split("-").map(Number);
+    const [ey, em] = span.end.split("-").map(Number);
+    for (let y = sy, m = sm; y < ey || (y === ey && m <= em); ) {
+      windowMonths.add(`${y}-${String(m).padStart(2, "0")}`);
+      m++;
+      if (m > 12) {
+        m = 1;
+        y++;
+      }
+    }
+  }
 
   const toBar = (r: MonthRevenue | DayRevenue): Bar => {
     const isDay = "date" in r;
@@ -515,23 +582,9 @@ export function computeMetrics(
       }, 0);
     }
     if (gmvMonths.size === 0) return null;
-    // windowRows may be quarters/years; expand each back to its months.
-    const inBucket = (monthKey: string) =>
-      windowRows.some((r) => {
-        const k = "date" in r ? r.date : r.month;
-        if (k.includes("-Q")) {
-          const [y, q] = k.split("-Q");
-          const m = Number(monthKey.split("-")[1]);
-          return (
-            monthKey.startsWith(y) && Math.floor((m - 1) / 3) + 1 === Number(q)
-          );
-        }
-        if (k.length === 4) return monthKey.startsWith(k);
-        return k === monthKey;
-      });
     let total = 0;
     for (const [monthKey, amount] of gmvMonths) {
-      if (inBucket(monthKey)) total += amount;
+      if (windowMonths.has(monthKey)) total += amount;
     }
     return total;
   })();
@@ -554,24 +607,9 @@ export function computeMetrics(
   })();
 
   if (!stateGmvUnavailable) {
-    const windowMonthKeys = new Set<string>();
-    for (const monthKey of gmvMonths.keys()) {
-      const inIt = windowRows.some((r) => {
-        const k = "date" in r ? r.date : r.month;
-        if (k.includes("-Q")) {
-          const [y, q] = k.split("-Q");
-          const mm = Number(monthKey.split("-")[1]);
-          return monthKey.startsWith(y) && Math.floor((mm - 1) / 3) + 1 === Number(q);
-        }
-        if (k.length === 4) return monthKey.startsWith(k);
-        return k === monthKey;
-      });
-      if (inIt) windowMonthKeys.add(monthKey);
-    }
-
     const perState = new Map<string, number>();
     for (const g of snapshot.gmv) {
-      if (!inScope(g.platform) || !windowMonthKeys.has(g.month)) continue;
+      if (!inScope(g.platform) || !windowMonths.has(g.month)) continue;
       for (const [code, amount] of Object.entries(g.byState ?? {})) {
         if (typeof amount === "number" && Number.isFinite(amount)) {
           perState.set(code, (perState.get(code) ?? 0) + amount);
@@ -595,7 +633,13 @@ export function computeMetrics(
   // Oldest date wins: the total is only as current as its stalest component.
   const cashAsOf = cashDates.length ? cashDates[0] : null;
 
+  const windowLabel =
+    range.from || bucket === "month" || bucket === "day" || range.count === Infinity
+      ? range.window
+      : `last ${take} ${bucket}${take === 1 ? "" : "s"}`;
+
   return {
+    windowLabel,
     stateGmvUnavailable,
     gmvWindow:
       gmvWindowTotal === null

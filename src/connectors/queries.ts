@@ -76,10 +76,35 @@ export const GMV_DAILY_SQL = process.env.PYROTREE_SQL_GMV_DAILY ?? null;
  * MongoDB equivalent of CONSUMERS_SQL, as an aggregation pipeline. Only used
  * when PYROTREE_DB_ENGINE=mongodb. Must project the same four field names.
  */
-export const CONSUMERS_MONGO_PIPELINE = process.env
-  .PYROTREE_MONGO_CONSUMERS
-  ? (JSON.parse(process.env.PYROTREE_MONGO_CONSUMERS) as object[])
-  : null;
+export const CONSUMERS_MONGO_PIPELINE = readMongoPipeline();
+
+/**
+ * Parsed defensively rather than with a bare `JSON.parse` at module scope.
+ * This module is imported by the connector registry, so a typo in the env var
+ * used to throw during import and take down the entire dashboard — including
+ * the Stripe and internal-API connectors that never touch Mongo — with a raw
+ * SyntaxError. A bad pipeline should disable the Mongo path and say why,
+ * nothing more.
+ */
+function readMongoPipeline(): object[] | null {
+  const raw = process.env.PYROTREE_MONGO_CONSUMERS;
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      console.warn(
+        "PYROTREE_MONGO_CONSUMERS must be a JSON array (an aggregation pipeline) — ignoring it.",
+      );
+      return null;
+    }
+    return parsed as object[];
+  } catch {
+    console.warn(
+      "PYROTREE_MONGO_CONSUMERS is not valid JSON — ignoring it. The database connector will report Mongo consumers as unavailable.",
+    );
+    return null;
+  }
+}
 
 /** Collection the Mongo pipeline runs against. */
 export const CONSUMERS_MONGO_COLLECTION =

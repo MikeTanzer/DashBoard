@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Bar } from "@/lib/metrics";
-import type { Grain, RangeSpec } from "@/lib/range";
+import type { Grain } from "@/lib/range";
 import { axisTicks, compactMoney, money, percent } from "@/lib/format";
 import { NotTracked } from "./StatTile";
 import { useElementWidth } from "@/lib/useElementWidth";
@@ -17,9 +17,10 @@ interface Props {
   /** Point-in-time rates — a window can't change them. */
   mrrCents: number;
   annualRunRateCents: number;
-  range: RangeSpec;
   /** Bucket the bars represent — may be coarser than the range's own series. */
   bucket: Grain;
+  /** What the window actually covers; may differ from the button pressed. */
+  windowLabel: string;
   scopeLabel: string;
   /** Set when the range needs day-level data and no source supplies it. */
   unavailableReason?: string;
@@ -39,8 +40,8 @@ export function RevenueCard({
   windowUsageShare,
   mrrCents,
   annualRunRateCents,
-  range,
   bucket,
+  windowLabel,
   scopeLabel,
   unavailableReason,
 }: Props) {
@@ -60,9 +61,9 @@ export function RevenueCard({
     bucket
   ];
 
-  // Fixed viewBox with the slots dividing it, so a 12-month view fills the
-  // card. Slot width is capped and the group centred, so a 3-month view shows
-  // three columns together rather than specks strung across the plot.
+  // Bars divide the full plot width evenly, and each bar's width is a fraction
+  // of its band — so a 3-month view draws broad columns and a 12-month or daily
+  // view draws slim ones.
   const PLOT_H = 210;
   const AXIS_H = 26;
   // Headroom: the top gridline label is centred on y=0 and the direct value
@@ -74,13 +75,25 @@ export function RevenueCard({
   // intended size on a phone instead of being scaled into illegibility.
   // Floored so a very narrow card still gets a usable plot and scrolls.
   const VB_W = Math.max(measuredWidth, 320);
-  const SLOT_MAX = 104;
 
   const n = Math.max(1, bars.length);
   const plotW = VB_W - LEFT - RIGHT;
-  const slot = Math.min(plotW / n, SLOT_MAX);
-  const startX = LEFT + (plotW - slot * n) / 2;
-  const barW = Math.min(24, Math.max(10, slot * 0.4));
+  // Uncapped: the old cap of 104 meant 3, 6 and 7 bars all landed on the same
+  // band, so they all drew the same width and the group was just centred in
+  // dead space. Letting the band grow is what makes width respond to count.
+  const slot = plotW / n;
+  const startX = LEFT;
+  // Fill ratio rises with density. A dozen columns look right at ~70% of their
+  // band, but 3 columns at 70% would be 240px slabs; 3 at 34% is a broad column
+  // and 12 at 70% is a slim one. Ramping between the two keeps bar width
+  // strictly decreasing as bars are added, which is how the chart reads.
+  const fill = n <= 3 ? 0.34 : n >= 12 ? 0.7 : 0.34 + ((n - 3) / 9) * 0.36;
+  // Floored so the densest daily view still draws a visible sliver; capped so a
+  // single-bucket window doesn't render one enormous slab. The floor itself is
+  // held under the band — on a phone, 4px would exceed the band past ~75 bars
+  // and the columns would fuse into a solid block.
+  const barW = Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85);
+  const barR = Math.min(4, barW / 3);
   const h = TOP_PAD + PLOT_H + AXIS_H;
 
   const max = Math.max(1, ...bars.map((b) => b.totalCents));
@@ -138,7 +151,7 @@ export function RevenueCard({
           <div className="eyebrow">
             {unavailableReason
               ? `Revenue · ${scopeLabel}`
-              : `Revenue collected · ${range.window} · ${scopeLabel}`}
+              : `Revenue collected · ${windowLabel} · ${scopeLabel}`}
           </div>
           <div className="display hero-figure mt-2.5">
             {unavailableReason ? "—" : money(windowTotalCents)}
@@ -251,7 +264,7 @@ export function RevenueCard({
                       ) : null}
                       {saasH > 0 ? (
                         <path
-                          d={roundedTopBar(x, saasTop, barW, saasH, 4)}
+                          d={roundedTopBar(x, saasTop, barW, saasH, barR)}
                           fill="var(--series-1)"
                           className="texture-a"
                         />
@@ -344,6 +357,7 @@ export function RevenueCard({
                   <th className="num">SaaS</th>
                   <th className="num">Usage</th>
                   <th className="num">Total</th>
+                  <th className="num">% of window</th>
                 </tr>
               </thead>
               <tbody>
@@ -358,9 +372,20 @@ export function RevenueCard({
                         </span>
                       ) : null}
                     </td>
-                    <td className="num">{money(b.saasCents)}</td>
-                    <td className="num">{money(b.usageCents)}</td>
+                    <td className="num">
+                      {money(b.saasCents)}
+                      <Share part={b.saasCents} whole={b.totalCents} />
+                    </td>
+                    <td className="num">
+                      {money(b.usageCents)}
+                      <Share part={b.usageCents} whole={b.totalCents} />
+                    </td>
                     <td className="num">{money(b.totalCents)}</td>
+                    <td className="num">
+                      {windowTotalCents > 0
+                        ? percent(b.totalCents / windowTotalCents, 1)
+                        : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -419,6 +444,26 @@ export function RevenueCard({
 }
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * A share of the row's own total, set beside the amount.
+ *
+ * The SaaS and Usage columns are two parts of the row's total, so the useful
+ * percentage is of THAT row — not of the window, which is what the trailing
+ * column answers. Keeping them visually distinct stops the two being read as
+ * the same measure.
+ */
+function Share({ part, whole }: { part: number; whole: number }) {
+  if (whole <= 0) return null;
+  return (
+    <span
+      className="ml-1.5"
+      style={{ color: "var(--text-muted)", fontSize: "0.85em" }}
+    >
+      {percent(part / whole)}
+    </span>
+  );
+}
 
 function Legend() {
   return (
