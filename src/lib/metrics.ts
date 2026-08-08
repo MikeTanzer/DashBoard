@@ -128,6 +128,14 @@ export interface DashboardMetrics {
   consumersPurchased: Metric<number>;
   /** Prose for that window: "last 90 days" / "ever". */
   consumerWindowLabel: string;
+  /**
+   * Tracked consumers who did NOT buy in the selected window.
+   *
+   * The tracked total itself has no time dimension — it's a running count the
+   * source keeps no history for — but its complement does, and it's the more
+   * actionable half: dormant shoppers are the reactivation pool.
+   */
+  consumersDormant: Metric<number>;
   /** Exclusive recency slices of the consumer base. */
   consumerRecency: Metric<RecencyBand[]>;
 
@@ -709,6 +717,11 @@ export function computeMetrics(
               : NEEDS_CONSUMERS,
           ),
     consumerWindowLabel: consumerWindowLabel(range.consumerWindow),
+
+    consumersDormant:
+      pWindow !== null && tracked > 0
+        ? available(Math.max(0, tracked - pWindow))
+        : unavailable(NEEDS_CONSUMERS),
 
     annualRunRate: hasCustomers
       ? available(totalCents * 12)

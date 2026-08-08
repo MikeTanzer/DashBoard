@@ -154,12 +154,25 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
                 : undefined
             }
           />
-          {/* A single running total with no time dimension in the source. */}
+          {/* The total is a running count with no time dimension, so it can't
+              track the range — but the share of it that has gone quiet in the
+              selected window can, and that's the half worth acting on. */}
           <StatTile
             label="Consumers tracked"
             metric={m.consumersTracked}
             format={compactNumber}
-            hint="All time — the source keeps no history"
+            note="All time"
+            hint={
+              m.consumersDormant.available && m.consumersTracked.available
+                ? m.consumerWindowLabel === "ever"
+                  ? `${compactNumber(m.consumersDormant.value)} (${percent(
+                      m.consumersDormant.value / m.consumersTracked.value,
+                    )}) have never purchased`
+                  : `${compactNumber(m.consumersDormant.value)} (${percent(
+                      m.consumersDormant.value / m.consumersTracked.value,
+                    )}) haven't bought in the ${m.consumerWindowLabel}`
+                : undefined
+            }
           />
           <StatTile
             label="States with customers"

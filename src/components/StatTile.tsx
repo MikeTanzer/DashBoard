@@ -8,6 +8,8 @@ interface Props {
   /** Signed change vs a named period, e.g. { value: 0.04, period: "last month" } */
   delta?: { value: number; period: string; upIsGood?: boolean } | null;
   hint?: string;
+  /** Small qualifier next to the value, e.g. "All time". */
+  note?: string;
   span?: 1 | 2;
 }
 
@@ -17,6 +19,7 @@ export function StatTile({
   format,
   delta,
   hint,
+  note,
   span = 1,
 }: Props) {
   return (
@@ -32,9 +35,9 @@ export function StatTile({
           </div>
           <div className="flex items-baseline gap-2 min-h-[16px]">
             {delta ? <Delta {...delta} /> : null}
-            {metric.note ? (
+            {note ?? metric.note ? (
               <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                {metric.note}
+                {note ?? metric.note}
               </span>
             ) : null}
           </div>
