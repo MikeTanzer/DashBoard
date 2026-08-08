@@ -11,6 +11,10 @@ interface Props {
   /** Small qualifier next to the value, e.g. "All time". */
   note?: string;
   span?: 1 | 2;
+  /** Whether this tile is driving the main chart. */
+  selected?: boolean;
+  /** Makes the tile a control that points the chart at this metric. */
+  onSelect?: () => void;
 }
 
 export function StatTile({
@@ -21,10 +25,32 @@ export function StatTile({
   hint,
   note,
   span = 1,
+  selected,
+  onSelect,
 }: Props) {
   return (
     <div
-      className={`card p-5 flex flex-col gap-2 ${span === 2 ? "lg:col-span-2" : ""}`}
+      className={`card p-5 max-[640px]:p-3.5 flex flex-col gap-2 ${
+        span === 2 ? "lg:col-span-2" : ""
+      } ${onSelect ? "tile-pick" : ""}`}
+      // A div with a role, not a <button>: the tile carries headings and
+      // several figures, and a button would flatten all of that into one
+      // announced label.
+      role={onSelect ? "button" : undefined}
+      tabIndex={onSelect ? 0 : undefined}
+      aria-pressed={onSelect ? !!selected : undefined}
+      data-selected={selected ? "" : undefined}
+      onClick={onSelect}
+      onKeyDown={
+        onSelect
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect();
+              }
+            }
+          : undefined
+      }
     >
       <div className="eyebrow">{label}</div>
 

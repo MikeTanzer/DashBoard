@@ -56,6 +56,36 @@ export interface Bar {
   partial?: boolean;
 }
 
+/** One point of a single-value series, bucketed exactly like the revenue bars. */
+export interface SeriesPoint {
+  key: string;
+  label: string;
+  full: string;
+  value: number;
+  partial?: boolean;
+}
+
+/** Which stat tile a series belongs to. */
+export type TileKey =
+  | "customers"
+  | "consumers"
+  | "states"
+  | "purchasers"
+  | "arpc"
+  | "cash"
+  | "gmv"
+  | "change";
+
+export interface TileSeries {
+  /** Chart heading when this tile is selected. */
+  title: string;
+  /** How to render a value. */
+  format: "money" | "count" | "percent";
+  /** Appended to money values, e.g. "/mo". */
+  unit?: string;
+  points: Metric<SeriesPoint[]>;
+}
+
 
 /**
  * One slice of the consumer base, by how recently they last bought.
@@ -144,6 +174,8 @@ export interface DashboardMetrics {
    * actionable half: dormant shoppers are the reactivation pool.
    */
   consumersDormant: Metric<number>;
+  /** A plottable series per stat tile, so a tile can drive the main chart. */
+  tileSeries: Record<TileKey, TileSeries>;
   /** Exclusive recency slices of the consumer base. */
   consumerRecency: Metric<RecencyBand[]>;
   /** The same slices scoped to one state, keyed by USPS code. */
@@ -639,6 +671,172 @@ export function computeMetrics(
     gmvDays.set(g.date, (gmvDays.get(g.date) ?? 0) + g.amountCents);
   }
 
+  // --- Per-tile series ------------------------------------------------------
+  // Each stat tile can drive the main chart. Only some of these have real
+  // history: revenue, GMV and customer starts do; the consumer rollup is a
+  // current snapshot with no time dimension and cash is a single balance. The
+  // ones that can't be plotted say what would make them plottable rather than
+  // drawing an invented line, which is the whole point of the Metric type.
+
+  /** Last calendar day a bucket covers — when a "how many" figure is measured. */
+  const bucketEndDate = (r: MonthRevenue | DayRevenue): string => {
+    if ("date" in r) return r.date;
+    const end = monthSpan(r.month).end;
+    const [y, mo] = end.split("-").map(Number);
+    const lastDay = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+    return `${end}-${String(lastDay).padStart(2, "0")}`;
+  };
+
+  /**
+   * Whether a customer head count can be rebuilt for past periods.
+   *
+   * Both failures here produce a WRONG line rather than a missing one, which
+   * is why they're checked rather than assumed: a customer with no start date
+   * can't be placed in time at all, and a churned customer with no churn date
+   * would be absent from every past bucket even though they were paying then.
+   */
+  const customerHistoryNeeds: string | null = !customers.length
+    ? NEEDS_CUSTOMERS
+    : !customers.every((c) => c.startedAt)
+      ? "Needs a start date on every customer to rebuild the count for past periods. Stripe supplies it from the subscription; otherwise add `startedAt`."
+      : customers.some((c) => c.status === "churned")
+        ? "Some customers are marked churned but carry no churn date, so past periods can't be rebuilt — they'd be missing from months they were actually paying for. Add a `churnedAt` date."
+        : null;
+
+  const activeAsOf = (date: string) =>
+    customers.filter((c) => c.startedAt && c.startedAt <= date);
+
+  const pointFrom = (r: MonthRevenue | DayRevenue, value: number): SeriesPoint => {
+    const b = toBar(r);
+    return { key: b.key, label: b.label, full: b.full, value, partial: b.partial };
+  };
+
+  /** GMV for one bucket, over exactly the months (or the day) it covers. */
+  const gmvForRow = (r: MonthRevenue | DayRevenue): number | null => {
+    if ("date" in r) {
+      return snapshot.gmvDaily.length ? (gmvDays.get(r.date) ?? 0) : null;
+    }
+    if (!snapshot.gmv.length) return null;
+    const span = monthSpan(r.month);
+    const [sy, sm] = span.start.split("-").map(Number);
+    const [ey, em] = span.end.split("-").map(Number);
+    let total = 0;
+    for (let y = sy, mo = sm; y < ey || (y === ey && mo <= em); ) {
+      total += gmvMonths.get(`${y}-${String(mo).padStart(2, "0")}`) ?? 0;
+      mo++;
+      if (mo > 12) {
+        mo = 1;
+        y++;
+      }
+    }
+    return total;
+  };
+
+  /** Months a bucket spans, for normalising a per-month figure. */
+  const monthsPerBucket =
+    bucket === "month" ? 1 : bucket === "quarter" ? 3 : bucket === "year" ? 12 : null;
+
+  const countSeries = (fn: (row: MonthRevenue | DayRevenue) => number) =>
+    customerHistoryNeeds
+      ? unavailable(customerHistoryNeeds)
+      : available(windowRows.map((r) => pointFrom(r, fn(r))));
+
+  const tileSeries: Record<TileKey, TileSeries> = {
+    customers: {
+      title: "Customers over time",
+      format: "count",
+      points: countSeries((r) => activeAsOf(bucketEndDate(r)).length),
+    },
+
+    states: {
+      title: "States with customers over time",
+      format: "count",
+      points: countSeries(
+        (r) => new Set(activeAsOf(bucketEndDate(r)).map((c) => c.state).filter(Boolean)).size,
+      ),
+    },
+
+    arpc: {
+      title:
+        monthsPerBucket === null
+          ? "Revenue per customer, per day"
+          : "Avg revenue per customer, per month",
+      format: "money",
+      unit: monthsPerBucket === null ? "/day" : "/mo",
+      points: customerHistoryNeeds
+        ? unavailable(customerHistoryNeeds)
+        : available(
+            windowRows.map((r) => {
+              const heads = activeAsOf(bucketEndDate(r)).length;
+              // A bucket before the first customer signed has no denominator;
+              // 0 is the honest value, not a divide-by-zero Infinity.
+              const per = heads > 0 ? r.totalCents / heads : 0;
+              return pointFrom(r, monthsPerBucket ? per / monthsPerBucket : per);
+            }),
+          ),
+    },
+
+    gmv: {
+      title: "Gross merchandise value over time",
+      format: "money",
+      points: (() => {
+        const vals = windowRows.map(gmvForRow);
+        if (vals.some((v) => v === null)) {
+          return unavailable(
+            "date" in (windowRows[0] ?? {})
+              ? "Day-level GMV needs a `gmvDaily` series — monthly totals can't be split into days after the fact."
+              : NEEDS_GMV,
+          );
+        }
+        return available(windowRows.map((r, i) => pointFrom(r, vals[i] as number)));
+      })(),
+    },
+
+    change: {
+      title: "Revenue change, period over period",
+      format: "percent",
+      points: (() => {
+        // The first bucket has nothing before it, so the series starts at the
+        // second — a leading 0% would read as "flat", which is a claim.
+        if (windowRows.length < 2) {
+          return unavailable(
+            "Needs at least two complete buckets in the window to compare one against the previous.",
+          );
+        }
+        return available(
+          windowRows.slice(1).map((r, i) => {
+            const prev = windowRows[i].totalCents;
+            return pointFrom(r, prev > 0 ? (r.totalCents - prev) / prev : 0);
+          }),
+        );
+      })(),
+    },
+
+    consumers: {
+      title: "Consumers tracked over time",
+      format: "count",
+      points: unavailable(
+        "The consumer rollup is a current head count with no time dimension — it says how many consumers exist now, not how many existed last March. Plotting it needs a per-period snapshot: have the consumer query group by month, or record the rollup on a schedule.",
+      ),
+    },
+
+    purchasers: {
+      title: "Purchasers over time",
+      format: "count",
+      points: unavailable(
+        "Purchaser counts are trailing-window totals as of today, not a per-period series. Plotting them needs the consumer query to return one row per month (distinct purchasers in that month) rather than one row per platform.",
+      ),
+    },
+
+    cash: {
+      title: "Cash on hand over time",
+      format: "money",
+      points: unavailable(
+        "Cash on hand is a balance read at a single moment, so there's nothing to plot without history. Record the balance on a schedule and send it as a dated series.",
+      ),
+    },
+  };
+
   const gmvWindowTotal = (() => {
     // Match the keys the revenue window is already built from, so a quarter or
     // year rolls up identically instead of being re-derived.
@@ -731,6 +929,7 @@ export function computeMetrics(
       : unavailable(NEEDS_CASH),
     cashAsOf,
 
+    tileSeries,
     consumerRecency: recency,
     consumerRecencyByState,
     stateRecencyUnavailable,

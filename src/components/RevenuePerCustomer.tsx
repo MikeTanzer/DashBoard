@@ -15,10 +15,35 @@ import { NotTracked } from "./StatTile";
  * Dots reuse the chart's series colors so the split reads as the same SaaS /
  * usage encoding used everywhere else.
  */
-export function RevenuePerCustomer({ m }: { m: DashboardMetrics }) {
+export function RevenuePerCustomer({
+  m,
+  selected,
+  onSelect,
+}: {
+  m: DashboardMetrics;
+  selected?: boolean;
+  onSelect?: () => void;
+}) {
+  const pickProps = {
+    className: `card p-5 max-[640px]:p-3.5 flex flex-col gap-2 ${onSelect ? "tile-pick" : ""}`,
+    role: onSelect ? ("button" as const) : undefined,
+    tabIndex: onSelect ? 0 : undefined,
+    "aria-pressed": onSelect ? !!selected : undefined,
+    "data-selected": selected ? "" : undefined,
+    onClick: onSelect,
+    onKeyDown: onSelect
+      ? (e: React.KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelect();
+          }
+        }
+      : undefined,
+  };
+
   if (!m.avgGrossPerCustomer.available) {
     return (
-      <div className="card p-5 flex flex-col gap-2">
+      <div {...pickProps}>
         <div className="eyebrow">Avg revenue per customer</div>
         <NotTracked needs={m.avgGrossPerCustomer.needs} />
       </div>
@@ -32,7 +57,7 @@ export function RevenuePerCustomer({ m }: { m: DashboardMetrics }) {
     : null;
 
   return (
-    <div className="card p-5 flex flex-col gap-2">
+    <div {...pickProps}>
       <div className="eyebrow">Avg revenue per customer</div>
       <div className="display text-[30px]">{money(gross)}/mo</div>
 
@@ -85,7 +110,7 @@ function SplitRow({
   share: number;
 }) {
   return (
-    <div className="flex items-center gap-2.5 text-[13px]">
+    <div className="split-row flex items-center gap-2.5 text-[13px]">
       <span
         aria-hidden="true"
         style={{
@@ -96,17 +121,20 @@ function SplitRow({
           flexShrink: 0,
         }}
       />
-      <span className="flex-1" style={{ color: "var(--text-secondary)" }}>
+      <span
+        className="split-label flex-1"
+        style={{ color: "var(--text-secondary)" }}
+      >
         {label}
       </span>
       <span
-        className="font-semibold"
+        className="font-semibold whitespace-nowrap"
         style={{ fontVariantNumeric: "tabular-nums" }}
       >
         {money(amount)}/mo
       </span>
       <span
-        className="w-[40px] text-right"
+        className="split-pct w-[40px] text-right whitespace-nowrap"
         style={{
           color: "var(--text-muted)",
           fontVariantNumeric: "tabular-nums",

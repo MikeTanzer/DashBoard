@@ -420,6 +420,49 @@ body {
   }
 }
 
+/* A stat tile that points the main chart at its metric.
+   Hover shades the surface so it reads as pressable before you click; the
+   selected tile keeps the brand coral on its left edge and a tinted surface,
+   so which metric the chart is showing is legible at a glance from the row. */
+.tile-pick {
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+
+.tile-pick:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong, var(--border));
+}
+
+.tile-pick:active {
+  transform: translateY(1px);
+}
+
+.tile-pick:focus-visible {
+  outline: 2px solid var(--coral, #ff586e);
+  outline-offset: 2px;
+}
+
+.tile-pick[data-selected] {
+  background: color-mix(in srgb, var(--coral, #ff586e) 9%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--coral, #ff586e) 45%, transparent);
+}
+
+/* The marker sits inside the card's rounded corners rather than on the border,
+   so it can't fight the radius. */
+.tile-pick[data-selected]::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--coral, #ff586e);
+}
+
 /* The active state filter beside "Consumer recency", with its own clear X. */
 .state-chip {
   display: inline-flex;
@@ -676,6 +719,54 @@ a:focus-visible {
   }
   .map-label {
     display: none;
+  }
+
+  /* Two tiles per row leaves roughly 160px of usable width, and a 30px figure
+     like $2,056,500 simply does not fit — it ran past the card's edge. Scale
+     the figure with the viewport instead of clipping it, and let the long
+     labels wrap rather than push the layout wider. */
+  .card .display {
+    font-size: clamp(17px, 5.4vw, 26px);
+    letter-spacing: -0.03em;
+    overflow-wrap: anywhere;
+  }
+  .card .eyebrow {
+    overflow-wrap: anywhere;
+    hyphens: auto;
+  }
+  /* The SaaS / usage split rows: dot, label, amount, percentage on one line.
+     At two-up that's ~140px of room, so the row is allowed to wrap onto a
+     second line rather than shrink — a blanket min-width:0 here let every cell
+     shrink below its text, and the text then rendered straight over its
+     neighbour. Wrapping keeps every figure readable and nothing overlaps. */
+  .split-row {
+    flex-wrap: wrap;
+    row-gap: 1px;
+    column-gap: 6px;
+    font-size: 11.5px;
+  }
+  .split-row .split-label {
+    flex: 0 0 auto;
+  }
+  .split-row .split-pct {
+    width: auto;
+  }
+
+  /* Centred at two-up. The tiles are narrow enough that a left rag leaves a
+     ragged column of short lines against a lot of empty right side; centring
+     balances the figure, its label and its footnote as one block. Applies to
+     the stat tiles only — tables and the states card still read left-aligned,
+     where alignment is doing real work. */
+  .tile-pick {
+    text-align: center;
+  }
+  .tile-pick .split-row {
+    justify-content: center;
+  }
+  /* The selected marker is a left edge bar, so centred text needs the padding
+     back to avoid sitting against it. */
+  .tile-pick[data-selected] {
+    padding-left: calc(0.875rem + 3px);
   }
 }
 

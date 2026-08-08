@@ -79,12 +79,14 @@ export function FilterBar({
   return (
     <div
       className="control-scroll flex flex-wrap items-center gap-2"
+      role="group"
+      aria-label="Platform"
       style={{ opacity: pending ? 0.6 : 1, transition: "opacity 120ms" }}
     >
-      {/* The chips are self-evidently a platform picker — on a phone the label
-          only costs horizontal room the row doesn't have. */}
-      <span className="eyebrow mr-1 max-[640px]:hidden">Platform</span>
-
+      {/* No "Platform" label. The chips — All platforms, and the two
+          wordmarks — say what they are without one, and the row reads cleaner
+          starting on the control itself. The group is still named for
+          assistive tech via aria-label below. */}
       <Chip active={all} onClick={() => setPlatforms([])}>
         <AllMark />
         All platforms

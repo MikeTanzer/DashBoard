@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { computeMetrics, platformBreakdown } from "@/lib/metrics";
+import type { TileKey } from "@/lib/metrics";
 import {
   priorPhrase,
   readRange,
@@ -57,6 +59,16 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
     bucket,
   );
   const platforms = platformBreakdown(snapshot);
+
+  /**
+   * Which stat tile drives the chart. Average revenue per customer by default;
+   * clicking the selected tile again returns the chart to the stacked revenue
+   * breakdown, which is otherwise unreachable since revenue has no tile of its
+   * own.
+   */
+  const [tile, setTile] = useState<TileKey | null>("arpc");
+  const pickTile = (k: TileKey) => setTile((cur) => (cur === k ? null : k));
+  const activeSeries = tile ? m.tileSeries[tile] : null;
 
   const scopeLabel =
     selected.length === 0
@@ -135,6 +147,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               windowLabel={m.windowLabel}
               scopeLabel={scopeLabel}
               unavailableReason={m.bars.available ? undefined : m.bars.needs}
+              series={activeSeries}
             />
           ) : (
             <EmptyCard
@@ -151,6 +164,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               The range drives arrivals, which we CAN compute exactly. */}
           <StatTile
             label="Current customers"
+            selected={tile === "customers"}
+            onSelect={() => pickTile("customers")}
             metric={m.customerCount}
             format={fullNumber}
             hint={
@@ -164,6 +179,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               selected window can, and that's the half worth acting on. */}
           <StatTile
             label="Consumers tracked"
+            selected={tile === "consumers"}
+            onSelect={() => pickTile("consumers")}
             metric={m.consumersTracked}
             format={compactNumber}
             note="All time"
@@ -181,6 +198,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           />
           <StatTile
             label="States with customers"
+            selected={tile === "states"}
+            onSelect={() => pickTile("states")}
             metric={m.stateCount}
             format={(v) => `${v} of 51`}
             hint={
@@ -201,6 +220,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
                 : `Purchased in ${m.consumerWindowLabel}`
             }
             metric={m.consumersPurchased}
+            selected={tile === "purchasers"}
+            onSelect={() => pickTile("purchasers")}
             format={compactNumber}
             hint={
               m.consumersPurchased.available && m.consumersTracked.available
@@ -212,13 +233,19 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
 
         {/* Row 2 — economics. Four equal tiles, matching the row above. --- */}
         <div className="grid grid-cols-2 gap-4 max-[640px]:gap-2.5 lg:grid-cols-4 mb-6">
-          <RevenuePerCustomer m={m} />
+          <RevenuePerCustomer
+            m={m}
+            selected={tile === "arpc"}
+            onSelect={() => pickTile("arpc")}
+          />
 
           {/* A balance, not a flow: it doesn't move with the time range, so no
               window is named here. The as-of date is the honest caveat — a
               stale balance looks identical to a current one. */}
           <StatTile
             label="Cash on hand"
+            selected={tile === "cash"}
+            onSelect={() => pickTile("cash")}
             metric={m.cashOnHand}
             format={(v) => money(v)}
             hint={
@@ -235,6 +262,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               hint both work to keep the two from being read as the same thing. */}
           <StatTile
             label={`GMV · ${m.windowLabel}`}
+            selected={tile === "gmv"}
+            onSelect={() => pickTile("gmv")}
             metric={m.gmvWindow}
             format={(v) => compactMoney(v)}
             hint={
@@ -246,6 +275,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
 
           <StatTile
             label="Revenue change"
+            selected={tile === "change"}
+            onSelect={() => pickTile("change")}
             metric={m.revenueChange}
             format={(v) => `${v >= 0 ? "+" : ""}${percent(v, 1)}`}
             hint={`Complete periods only · vs ${priorPhrase(range)}`}

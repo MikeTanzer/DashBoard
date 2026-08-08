@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Bar } from "@/lib/metrics";
+import type { Bar, TileSeries } from "@/lib/metrics";
+import { SeriesChart, SeriesTable } from "./SeriesChart";
 import type { Grain } from "@/lib/range";
 import { axisTicks, compactMoney, money, percent } from "@/lib/format";
 import { NotTracked } from "./StatTile";
@@ -24,6 +25,12 @@ interface Props {
   scopeLabel: string;
   /** Set when the range needs day-level data and no source supplies it. */
   unavailableReason?: string;
+  /**
+   * The stat tile currently driving the chart. When set, the chart and table
+   * show that metric over time instead of the revenue breakdown; the headline
+   * above stays on revenue, which is the card's anchor figure.
+   */
+  series?: TileSeries | null;
 }
 
 /**
@@ -44,6 +51,7 @@ export function RevenueCard({
   windowLabel,
   scopeLabel,
   unavailableReason,
+  series,
 }: Props) {
   const [view, setView] = useState<View>("chart");
   const [hover, setHover] = useState<{
@@ -184,7 +192,7 @@ export function RevenueCard({
       >
         <div className="flex items-baseline justify-between gap-3 mb-1">
           <h2 className="text-[13px] font-bold">
-            Collected revenue by {unit}
+            {series ? series.title : `Collected revenue by ${unit}`}
           </h2>
           {!unavailableReason ? (
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -194,7 +202,19 @@ export function RevenueCard({
           ) : null}
         </div>
 
-        {unavailableReason ? (
+        {series ? (
+          series.points.available ? (
+            view === "chart" ? (
+              <SeriesChart series={series} points={series.points.value} />
+            ) : (
+              <SeriesTable series={series} points={series.points.value} />
+            )
+          ) : (
+            <div className="py-2">
+              <NotTracked needs={series.points.needs} />
+            </div>
+          )
+        ) : unavailableReason ? (
           <div className="py-2">
             <NotTracked needs={unavailableReason} />
           </div>
