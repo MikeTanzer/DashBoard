@@ -6,6 +6,8 @@ import { databaseConnector } from "./database";
 import { internalApiConnector } from "./internalApi";
 import type {
   CashPosition,
+  ExpensePoint,
+  HeadcountPoint,
   GmvDayPoint,
   GmvPoint,
   ConsumerStats,
@@ -57,6 +59,8 @@ async function buildSnapshot(): Promise<Snapshot> {
   const cash = new Map<string, CashPosition>();
   const gmv = new Map<string, GmvPoint>();
   const gmvDaily = new Map<string, GmvDayPoint>();
+  const expenses = new Map<string, ExpensePoint>();
+  const headcount = new Map<string, HeadcountPoint>();
   const platforms = new Map<string, Platform>(
     DEFAULT_PLATFORMS.map((p) => [p.id, p]),
   );
@@ -72,6 +76,12 @@ async function buildSnapshot(): Promise<Snapshot> {
     for (const c of r.cash ?? []) cash.set(c.label, c);
     for (const g of r.gmv ?? []) gmv.set(`${g.month}|${g.platform}`, g);
     for (const g of r.gmvDaily ?? []) gmvDaily.set(`${g.date}|${g.platform}`, g);
+    // Keyed by month + category + platform, so a later source can correct one
+    // line of a month without wiping the rest of it.
+    for (const e of r.expenses ?? [])
+      expenses.set(`${e.month}|${e.category}|${e.platform ?? ""}`, e);
+    for (const h of r.headcount ?? [])
+      headcount.set(`${h.month}|${h.platform ?? ""}`, h);
   }
 
   // Any platform referenced by data but never declared still gets a name.
@@ -96,6 +106,8 @@ async function buildSnapshot(): Promise<Snapshot> {
     platforms: [...platforms.values()],
     customers: [...customers.values()],
     consumers: [...consumers.values()],
+    expenses: [...expenses.values()].sort((a, b) => a.month.localeCompare(b.month)),
+    headcount: [...headcount.values()].sort((a, b) => a.month.localeCompare(b.month)),
     revenue: [...revenue.values()].sort((a, b) => a.month.localeCompare(b.month)),
     revenueDaily: [...revenueDaily.values()].sort((a, b) =>
       a.date.localeCompare(b.date),

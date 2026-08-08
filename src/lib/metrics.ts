@@ -74,7 +74,12 @@ export type TileKey =
   | "arpc"
   | "cash"
   | "gmv"
-  | "change";
+  | "change"
+  | "expenses"
+  | "net"
+  | "runway"
+  | "margin"
+  | "revPerEmployee";
 
 export interface TileSeries {
   /** Chart heading when this tile is selected. */
@@ -196,6 +201,28 @@ export interface DashboardMetrics {
   /** Our revenue as a share of that GMV, when both are known. */
   takeRate: Metric<number>;
 
+  // --- Expenses -----------------------------------------------------------
+  /** Total spend over the window, scoped to the platform filter. */
+  expensesWindow: Metric<number>;
+  /** Revenue minus expenses over the same months. Negative means burning. */
+  netProfitWindow: Metric<number>;
+  /** Months of cash left at the current burn. Unavailable when profitable. */
+  runwayMonths: Metric<number>;
+  /** (Revenue − cost of revenue) / revenue. Needs costOfRevenue flags. */
+  grossMargin: Metric<number>;
+  /** Annual run rate per employee. */
+  revenuePerEmployee: Metric<number>;
+  /** Spend split by category, largest first. */
+  expenseByCategory: Metric<RecencyBand[]>;
+  /**
+   * Shared overhead left OUT of the figures above because a platform filter is
+   * active. Zero when unfiltered. Surfaced so a filtered margin is never
+   * mistaken for a full one.
+   */
+  sharedExcludedCents: number;
+  /** Headcount behind revenuePerEmployee, or null when unknown. */
+  employees: number | null;
+
   /** Total cash across reported accounts. A balance — the range doesn't move it. */
   cashOnHand: Metric<number>;
   /** How many months of current burn that covers, when burn is knowable. */
@@ -222,6 +249,9 @@ const TENURE_BANDS: { label: string; maxDays: number | null }[] = [
 ];
 
 const TENURE_RAMP = [600, 500, 400, 300, 200, 100];
+
+/** USPS codes the map draws that are not states. */
+const NON_STATE_CODES = new Set(["DC", "PR", "VI", "GU", "AS", "MP"]);
 
 const NEEDS_CUSTOMERS =
   "Connect Stripe, the internal admin API, or add customers to data/network.json.";
@@ -319,8 +349,16 @@ export function computeMetrics(
   const stateList = [...byState.values()].sort(
     (a, b) => b.customers - a.customers || a.name.localeCompare(b.name),
   );
-  /** States holding at least one CUSTOMER — what "19 of 51" counts. */
-  const customerStateCount = stateList.filter((s) => s.customers > 0).length;
+  /**
+   * States holding at least one customer.
+   *
+   * DC is excluded from the count: it carries a USPS code and appears on the
+   * map, but it is not a state, and counting it made the denominator 51. It is
+   * still shaded and still hoverable — it just isn't one of the fifty.
+   */
+  const customerStateCount = stateList.filter(
+    (s) => s.customers > 0 && !NON_STATE_CODES.has(s.code),
+  ).length;
 
   // --- Current MRR ----------------------------------------------------------
   const saasCents = sum(customers, (c) => c.mrrSaasCents);
@@ -764,6 +802,200 @@ export function computeMetrics(
     gmvDays.set(g.date, (gmvDays.get(g.date) ?? 0) + g.amountCents);
   }
 
+  // --- Expenses -------------------------------------------------------------
+  /**
+   * Expense scoping, and the honesty problem it creates.
+   *
+   * An expense may carry a platform (hosting for WebJoint) or not (legal, exec
+   * salaries). With no filter, everything counts. With a platform selected,
+   * only that platform's DIRECT costs count — shared overhead is deliberately
+   * excluded rather than allocated, because any allocation rule (headcount,
+   * revenue share) is an assumption, and one baked silently into a margin is
+   * how a per-platform P&L ends up flattering.
+   *
+   * The excluded total is kept so the UI can name it instead of leaving a
+   * filtered margin looking like the whole truth.
+   */
+  const expenseInScope = (e: { platform?: PlatformId }) =>
+    !platformFilter ? true : e.platform !== undefined && platformFilter.includes(e.platform);
+
+  const expensesInWindow = snapshot.expenses.filter((e) =>
+    windowMonths.has(e.month),
+  );
+  const scopedExpenses = expensesInWindow.filter(expenseInScope);
+  const sharedExcludedCents = platformFilter
+    ? expensesInWindow
+        .filter((e) => e.platform === undefined)
+        .reduce((a, e) => a + e.amountCents, 0)
+    : 0;
+
+  const hasExpenses = snapshot.expenses.length > 0;
+  // Expenses are booked monthly, so a 1W or 1M window (which reads the daily
+  // revenue series) has no month to line up against. Saying so beats showing a
+  // whole month's costs against seven days of revenue.
+  const expensesNeedMonths =
+    windowMonths.size === 0
+      ? "Expenses are recorded by month, so a day-level window has nothing to line up against. Switch to 3M or wider."
+      : null;
+
+  const NEEDS_EXPENSES =
+    "Add an `expenses` array to data/network.json (month, category, amountCents, optional platform and costOfRevenue), or have the admin API return one.";
+
+  const expensesWindowCents = scopedExpenses.reduce(
+    (a, e) => a + e.amountCents,
+    0,
+  );
+
+  const expensesWindow: Metric<number> = !hasExpenses
+    ? unavailable(NEEDS_EXPENSES)
+    : expensesNeedMonths
+      ? unavailable(expensesNeedMonths)
+      : available(expensesWindowCents);
+
+  /** Revenue for exactly the months the expenses cover, so the two are comparable. */
+  const revenueForExpenseMonths = windowRows
+    .filter((r) => !("date" in r))
+    .reduce((a, r) => a + r.totalCents, 0);
+
+  const netProfitWindow: Metric<number> =
+    !hasExpenses || expensesNeedMonths
+      ? (expensesWindow as Metric<number>)
+      : available(revenueForExpenseMonths - expensesWindowCents);
+
+  /** Average net per month across the window. Negative means burning. */
+  const monthlyNetCents =
+    windowMonths.size > 0
+      ? (revenueForExpenseMonths - expensesWindowCents) / windowMonths.size
+      : 0;
+
+  // Both computed here rather than reused: the cash total and the run rate are
+  // assembled further down, and hoisting them would reorder unrelated code.
+  const cashTotalCents = snapshot.cash.reduce((a, c) => a + c.amountCents, 0);
+  const annualRunRateCents = totalCents * 12;
+
+  const runwayMonths: Metric<number> = !hasExpenses
+    ? unavailable(NEEDS_EXPENSES)
+    : expensesNeedMonths
+      ? unavailable(expensesNeedMonths)
+      : !cashTotalCents
+        ? unavailable(NEEDS_CASH)
+        : monthlyNetCents >= 0
+          ? unavailable(
+              "The network is profitable over this window, so there's no burn to divide cash by — runway is unbounded rather than a number.",
+            )
+          : available(cashTotalCents / -monthlyNetCents);
+
+  /** Cost of revenue vs operating expense, for gross margin. */
+  const cogsCents = scopedExpenses
+    .filter((e) => e.costOfRevenue)
+    .reduce((a, e) => a + e.amountCents, 0);
+  const anyCogsFlagged = snapshot.expenses.some((e) => e.costOfRevenue);
+
+  const grossMargin: Metric<number> = !hasExpenses
+    ? unavailable(NEEDS_EXPENSES)
+    : expensesNeedMonths
+      ? unavailable(expensesNeedMonths)
+      : !anyCogsFlagged
+        ? unavailable(
+            "Gross margin needs to know which costs are cost of revenue. Mark those lines `costOfRevenue: true` (hosting, payment fees, support) — without it every cost is operating expense and gross margin would just restate net.",
+          )
+        : revenueForExpenseMonths <= 0
+          ? unavailable("No revenue in this window to take a margin on.")
+          : available(
+              (revenueForExpenseMonths - cogsCents) / revenueForExpenseMonths,
+            );
+
+  const expenseByCategory: Metric<RecencyBand[]> = !hasExpenses
+    ? unavailable(NEEDS_EXPENSES)
+    : expensesNeedMonths
+      ? unavailable(expensesNeedMonths)
+      : (() => {
+          const byCat = new Map<string, number>();
+          for (const e of scopedExpenses) {
+            byCat.set(e.category, (byCat.get(e.category) ?? 0) + e.amountCents);
+          }
+          const rows = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
+          if (!rows.length || expensesWindowCents <= 0) {
+            return unavailable(NEEDS_EXPENSES);
+          }
+          const RAMP = [600, 500, 400, 300, 200, 100];
+          return available(
+            rows.map(([label, value], i) => ({
+              key: label,
+              label,
+              value,
+              share: value / expensesWindowCents,
+              step: RAMP[Math.min(i, RAMP.length - 1)],
+            })),
+          );
+        })();
+
+  // --- Headcount ------------------------------------------------------------
+  const headcountInScope = (h: { platform?: PlatformId }) =>
+    !platformFilter ? true : h.platform !== undefined && platformFilter.includes(h.platform);
+
+  /** Latest headcount at or before the end of the window. */
+  const latestHeadcount = (() => {
+    const rows = snapshot.headcount
+      .filter(headcountInScope)
+      .filter((h) => h.month <= windowEnd.slice(0, 7))
+      .sort((a, b) => a.month.localeCompare(b.month));
+    if (!rows.length) return null;
+    const last = rows[rows.length - 1].month;
+    return rows
+      .filter((h) => h.month === last)
+      .reduce((a, h) => a + h.employees, 0);
+  })();
+
+  const NEEDS_HEADCOUNT = platformFilter
+    ? "Headcount isn't broken down by platform. Add a `platform` to the headcount rows, or clear the platform filter to see the network figure."
+    : "Add a `headcount` array to data/network.json (month, employees), or have the admin API return one.";
+
+  const revenuePerEmployee: Metric<number> =
+    latestHeadcount === null || latestHeadcount <= 0
+      ? unavailable(NEEDS_HEADCOUNT)
+      : !annualRunRateCents
+        ? unavailable(NEEDS_CUSTOMERS)
+        : available(annualRunRateCents / latestHeadcount);
+
+  /** Scoped expense total for one month row, optionally cost-of-revenue only. */
+  const expenseTotalForRow = (
+    r: MonthRevenue | DayRevenue,
+    cogsOnly = false,
+  ): number => {
+    if ("date" in r) return 0;
+    const span = monthSpan(r.month);
+    const [sy, sm] = span.start.split("-").map(Number);
+    const [ey, em] = span.end.split("-").map(Number);
+    const months = new Set<string>();
+    for (let y = sy, mo = sm; y < ey || (y === ey && mo <= em); ) {
+      months.add(`${y}-${String(mo).padStart(2, "0")}`);
+      mo++;
+      if (mo > 12) {
+        mo = 1;
+        y++;
+      }
+    }
+    return snapshot.expenses
+      .filter((e) => months.has(e.month) && expenseInScope(e))
+      .filter((e) => (cogsOnly ? e.costOfRevenue : true))
+      .reduce((a, e) => a + e.amountCents, 0);
+  };
+
+  /** Headcount as at a month key, carrying the last known value forward. */
+  const headcountAt = (monthKey: string): number => {
+    const end = monthSpan(monthKey).end;
+    const rows = snapshot.headcount
+      .filter(headcountInScope)
+      .filter((h) => h.month <= end)
+      .sort((a, b) => a.month.localeCompare(b.month));
+    if (!rows.length) return 0;
+    const last = rows[rows.length - 1].month;
+    return rows
+      .filter((h) => h.month === last)
+      .reduce((a, h) => a + h.employees, 0);
+  };
+
   // --- Per-tile series ------------------------------------------------------
   // Each stat tile can drive the main chart. Only some of these have real
   // history: revenue, GMV and customer starts do; the consumer rollup is a
@@ -905,6 +1137,90 @@ export function computeMetrics(
       })(),
     },
 
+    expenses: {
+      title: "Expenses over time",
+      format: "money",
+      points: !hasExpenses
+        ? unavailable(NEEDS_EXPENSES)
+        : expensesNeedMonths
+          ? unavailable(expensesNeedMonths)
+          : available(
+              windowRows
+                .filter((r) => !("date" in r))
+                .map((r) => pointFrom(r, expenseTotalForRow(r))),
+            ),
+    },
+
+    net: {
+      title: "Net profit over time",
+      format: "money",
+      points: !hasExpenses
+        ? unavailable(NEEDS_EXPENSES)
+        : expensesNeedMonths
+          ? unavailable(expensesNeedMonths)
+          : available(
+              windowRows
+                .filter((r) => !("date" in r))
+                .map((r) => pointFrom(r, r.totalCents - expenseTotalForRow(r))),
+            ),
+    },
+
+    // Point-in-time figures with no per-period series behind them. Runway is
+    // computed from a cash balance we only hold for today; margin and revenue
+    // per employee could be plotted, but only once expenses and headcount are
+    // reconstructable per period the same way — which is the same gap the
+    // consumer tiles have.
+    runway: {
+      title: "Runway over time",
+      format: "count",
+      points: unavailable(
+        "Runway is derived from today's cash balance, and only one balance is stored. Plotting it needs a dated series of balances — record cash on a schedule.",
+      ),
+    },
+
+    margin: {
+      title: "Gross margin over time",
+      format: "percent",
+      points: !hasExpenses
+        ? unavailable(NEEDS_EXPENSES)
+        : expensesNeedMonths
+          ? unavailable(expensesNeedMonths)
+          : !anyCogsFlagged
+            ? unavailable(
+                "Needs `costOfRevenue: true` on the lines that are cost of revenue.",
+              )
+            : available(
+                windowRows
+                  .filter((r) => !("date" in r))
+                  .map((r) =>
+                    pointFrom(
+                      r,
+                      r.totalCents > 0
+                        ? (r.totalCents - expenseTotalForRow(r, true)) / r.totalCents
+                        : 0,
+                    ),
+                  ),
+              ),
+    },
+
+    revPerEmployee: {
+      title: "Revenue per employee over time",
+      format: "money",
+      points:
+        snapshot.headcount.length === 0
+          ? unavailable(NEEDS_HEADCOUNT)
+          : available(
+              windowRows
+                .filter((r) => !("date" in r))
+                .map((r) => {
+                  // Narrowed by the filter above, but TypeScript can't see
+                  // through it — day rows never reach here.
+                  const heads = "date" in r ? 0 : headcountAt(r.month);
+                  return pointFrom(r, heads > 0 ? (r.totalCents * 12) / heads : 0);
+                }),
+            ),
+    },
+
     consumers: {
       title: "Consumers tracked over time",
       format: "count",
@@ -1023,6 +1339,14 @@ export function computeMetrics(
     cashAsOf,
 
     windowMonthCount: windowMonths.size,
+    expensesWindow,
+    netProfitWindow,
+    runwayMonths,
+    grossMargin,
+    revenuePerEmployee,
+    expenseByCategory,
+    sharedExcludedCents,
+    employees: latestHeadcount,
     tileSeries,
     consumerRecency: recency,
     consumerRecencyByState,

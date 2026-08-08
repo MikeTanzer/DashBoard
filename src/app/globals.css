@@ -929,6 +929,91 @@ a:focus-visible {
   }
 }
 
+/* Expense breakdown rows: label, bar, amount, share. Grid rather than flex so
+   every row's columns line up regardless of label length — ragged amounts are
+   the thing that makes a ranked list hard to scan. */
+.expense-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 190px) 1fr auto 52px;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.expense-label {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.expense-track {
+  display: block;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.expense-fill {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  /* Grows on load, same gesture as the chart columns. */
+  transform-origin: left center;
+  animation: expense-grow 520ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes expense-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.expense-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.expense-share {
+  text-align: right;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .expense-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "label value"
+      "track track";
+    row-gap: 4px;
+    font-size: 12px;
+  }
+  .expense-label {
+    grid-area: label;
+  }
+  .expense-value {
+    grid-area: value;
+  }
+  .expense-track {
+    grid-area: track;
+    height: 14px;
+  }
+  /* The share is already implied by the bar at this width. */
+  .expense-share {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .expense-fill {
+    animation: none;
+  }
+}
+
 /* --- Chart chrome ---------------------------------------------------------- */
 
 .axis-text {

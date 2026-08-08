@@ -437,6 +437,110 @@ for (const platform of ["webjoint", "menu"]) {
   }
 }
 
+// -- Expenses & headcount -----------------------------------------------------
+// Built from the revenue series rather than invented independently, so the
+// demo shows a business whose costs track its size: cost of revenue scales
+// with what it earns, payroll steps up with headcount, and the whole thing
+// lands near breakeven with a modest burn — which is where a network this size
+// would actually be, and it makes runway a real number instead of Infinity.
+//
+// Some lines carry a platform, some deliberately don't. Hosting and support
+// belong to the platform that incurred them; payroll, G&A and marketing are
+// company-wide. That split is the point: it's what lets the dashboard say
+// "direct costs only" honestly when you filter to one platform.
+const expenses = [];
+const headcount = [];
+
+const monthsSorted = [...new Set(revenue.map((r) => r.month))].sort();
+
+monthsSorted.forEach((month, i) => {
+  const monthRevenue = revenue
+    .filter((r) => r.month === month)
+    .reduce((a, r) => a + r.saasCents + r.usageCents, 0);
+
+  const perPlatform = (platform) =>
+    revenue
+      .filter((r) => r.month === month && r.platform === platform)
+      .reduce((a, r) => a + r.saasCents + r.usageCents, 0);
+
+  // Sized to the revenue, not picked at random: ~$1.35M of annual run rate
+  // supports a team in the low teens at roughly $100k of revenue per head,
+  // which is where a company at this stage actually sits. An earlier draft put
+  // 14-22 people against $100k of monthly revenue and the guard below caught
+  // it — payroll alone was 1.5x what the network earned.
+  const employees = 8 + Math.floor(i / 2);
+  headcount.push({ month, employees });
+
+  // --- Cost of revenue: scales with each platform's own revenue -------------
+  for (const platform of ["webjoint", "menu"]) {
+    const rev = perPlatform(platform);
+    if (rev <= 0) continue;
+    expenses.push({
+      month,
+      platform,
+      category: "Hosting & infrastructure",
+      amountCents: Math.round(rev * (0.081 + rand() * 0.014)),
+      costOfRevenue: true,
+    });
+    expenses.push({
+      month,
+      platform,
+      category: "Payment processing",
+      amountCents: Math.round(rev * (0.029 + rand() * 0.004)),
+      costOfRevenue: true,
+    });
+    expenses.push({
+      month,
+      platform,
+      category: "Customer support",
+      amountCents: Math.round(rev * (0.052 + rand() * 0.011)),
+      costOfRevenue: true,
+    });
+  }
+
+  // --- Operating expenses: company-wide, no platform tag -------------------
+  // Payroll is the dominant line for a company this size, and it steps with
+  // headcount rather than with revenue.
+  expenses.push({
+    month,
+    category: "Payroll & benefits",
+    amountCents: Math.round(employees * (9_600_00 + rand() * 900_00)),
+  });
+  expenses.push({
+    month,
+    category: "Sales & marketing",
+    amountCents: Math.round(monthRevenue * (0.10 + rand() * 0.045)),
+  });
+  expenses.push({
+    month,
+    category: "Software & tools",
+    amountCents: Math.round(employees * (310_00 + rand() * 90_00)),
+  });
+  expenses.push({
+    month,
+    category: "General & administrative",
+    amountCents: Math.round(19_000_00 + rand() * 6_000_00),
+  });
+});
+
+// Sanity: nothing negative, every month covered, and the network should be
+// burning rather than wildly profitable or the runway tile is meaningless.
+for (const e of expenses) {
+  if (!(e.amountCents >= 0)) {
+    throw new Error(`expense ${e.month}/${e.category} is ${e.amountCents}`);
+  }
+}
+{
+  const totalRev = revenue.reduce((a, r) => a + r.saasCents + r.usageCents, 0);
+  const totalExp = expenses.reduce((a, e) => a + e.amountCents, 0);
+  const margin = (totalRev - totalExp) / totalRev;
+  if (margin > 0.35 || margin < -0.9) {
+    throw new Error(
+      `demo net margin is ${(margin * 100).toFixed(1)}% — not a believable range`,
+    );
+  }
+}
+
 const payload = {
   demo: true,
   _comment:
@@ -456,6 +560,8 @@ const payload = {
   gmvDaily,
   // Cash is a balance reported by a bank or Stripe, never derived from the
   // revenue above — these are two independent figures and are meant to be.
+  expenses,
+  headcount,
   cash: [
     {
       label: "Operating account",

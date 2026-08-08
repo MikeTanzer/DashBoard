@@ -127,3 +127,33 @@ function readMongoPipeline(): object[] | null {
 /** Collection the Mongo pipeline runs against. */
 export const CONSUMERS_MONGO_COLLECTION =
   process.env.PYROTREE_MONGO_COLLECTION ?? "consumers";
+
+/**
+ * Optional. Monthly spend, for the expense, burn, runway and margin tiles.
+ *
+ * Must return these exact column names:
+ *   month ("YYYY-MM") · category (text) · amount_cents (bigint)
+ *   platform (text, NULLABLE) · cost_of_revenue (boolean, optional)
+ *
+ * Leave `platform` NULL for anything shared — payroll, legal, G&A. That is not
+ * a gap to be filled in: the dashboard treats untagged spend as company-wide
+ * and excludes it when you filter to one platform, saying so on every affected
+ * tile. Allocating it by some rule would bake an assumption into the margins.
+ *
+ * Set `cost_of_revenue` on hosting, payment fees and support. Without it every
+ * cost is operating expense and gross margin reports itself unavailable rather
+ * than quietly restating net margin.
+ *
+ * Most teams' spend lives in accounting software rather than the product
+ * database — a view over a QuickBooks/Xero/Ramp export is the usual shape here.
+ */
+export const EXPENSES_SQL = process.env.PYROTREE_SQL_EXPENSES ?? null;
+
+/**
+ * Optional. Headcount over time, for revenue per employee.
+ *
+ * Must return: month ("YYYY-MM") · employees (int) · platform (text, NULLABLE).
+ * A count only — this dashboard has no business holding anything that
+ * identifies a person.
+ */
+export const HEADCOUNT_SQL = process.env.PYROTREE_SQL_HEADCOUNT ?? null;

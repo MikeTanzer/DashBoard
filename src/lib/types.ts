@@ -178,6 +178,45 @@ export interface CashPosition {
   asOf?: string;
 }
 
+/**
+ * One month of spend in one category.
+ *
+ * `platform` is OPTIONAL on purpose. Hosting for WebJoint belongs to WebJoint;
+ * legal fees, exec salaries and the accounting subscription belong to the
+ * company. Forcing every cost onto a platform would mean inventing an
+ * allocation rule and baking that assumption into the numbers, so untagged
+ * spend stays untagged and the dashboard says so wherever it matters.
+ */
+export interface ExpensePoint {
+  /** "YYYY-MM". */
+  month: string;
+  /** Free text: "Payroll", "Hosting", "Marketing", "Payment fees". */
+  category: string;
+  amountCents: number;
+  /** Set only when the cost is genuinely attributable to one platform. */
+  platform?: PlatformId;
+  /**
+   * Cost of revenue rather than operating expense — hosting, payment fees,
+   * support. Drives gross margin; without it every cost is treated as opex and
+   * gross margin reports itself unavailable rather than equalling net.
+   */
+  costOfRevenue?: boolean;
+}
+
+/**
+ * Headcount at a point in time, for revenue per employee.
+ *
+ * A count, not a list of people: nothing here needs to identify anyone, and a
+ * dashboard that could would be a liability rather than a feature.
+ */
+export interface HeadcountPoint {
+  /** "YYYY-MM". */
+  month: string;
+  employees: number;
+  /** Set only when a team maps cleanly to one platform. */
+  platform?: PlatformId;
+}
+
 export type SourceId = "manual" | "stripe" | "database" | "internal-api";
 
 export type SourceState = "ok" | "not_configured" | "error" | "partial";
@@ -200,7 +239,8 @@ export type DataDomain =
   | "consumers"
   | "revenue"
   | "cash"
-  | "gmv";
+  | "gmv"
+  | "expenses";
 
 export interface ConnectorResult {
   customers?: CustomerRecord[];
@@ -210,6 +250,8 @@ export interface ConnectorResult {
   gmv?: GmvPoint[];
   gmvDaily?: GmvDayPoint[];
   cash?: CashPosition[];
+  expenses?: ExpensePoint[];
+  headcount?: HeadcountPoint[];
   platforms?: Platform[];
   status: SourceStatus;
 }
@@ -226,6 +268,8 @@ export interface Snapshot {
   gmv: GmvPoint[];
   gmvDaily: GmvDayPoint[];
   cash: CashPosition[];
+  expenses: ExpensePoint[];
+  headcount: HeadcountPoint[];
   sources: SourceStatus[];
 }
 

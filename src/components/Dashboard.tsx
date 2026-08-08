@@ -22,6 +22,7 @@ import {
 import { StatTile, NotTracked } from "@/components/StatTile";
 import { RevenuePerCustomer } from "@/components/RevenuePerCustomer";
 import { StatesCard } from "@/components/StatesCard";
+import { ExpensesCard } from "@/components/ExpensesCard";
 import { RevenueCard } from "@/components/RevenueCard";
 import { SourcesPanel } from "@/components/SourcesPanel";
 import { FilterBar } from "@/components/FilterBar";
@@ -214,7 +215,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             label="States with customers"
             {...tilePick("states")}
             metric={m.stateCount}
-            format={(v) => `${v} of 51`}
+            format={(v) => `${v} of 50`}
             hint={
               m.newStates.available
                 ? m.newStates.value > 0
@@ -288,6 +289,93 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             metric={m.revenueChange}
             format={(v) => `${v >= 0 ? "+" : ""}${percent(v, 1)}`}
             hint={`Complete periods only · vs ${priorPhrase(range)}`}
+          />
+        </div>
+
+        {/* Row 3 — what it costs to run. Expenses arrive monthly, so these
+            report themselves as untracked on a day-level window rather than
+            setting a whole month's costs against seven days of revenue. --- */}
+        <div className="grid grid-cols-2 gap-4 max-[640px]:gap-2.5 lg:grid-cols-4 mb-4">
+          <StatTile
+            label={`Expenses · ${m.windowLabel}`}
+            {...tilePick("expenses")}
+            metric={m.expensesWindow}
+            format={(v) => compactMoney(v)}
+            hint={
+              m.sharedExcludedCents > 0
+                ? `Direct costs only · ${compactMoney(m.sharedExcludedCents)} shared overhead excluded`
+                : undefined
+            }
+          />
+
+          {/* Named for what it is: a positive figure is profit, a negative one
+              is burn, and the label follows the sign rather than making the
+              reader work out which. */}
+          <StatTile
+            label={
+              m.netProfitWindow.available && m.netProfitWindow.value < 0
+                ? `Net burn · ${m.windowLabel}`
+                : `Net profit · ${m.windowLabel}`
+            }
+            {...tilePick("net")}
+            metric={m.netProfitWindow}
+            format={(v) => `${v < 0 ? "−" : ""}${compactMoney(Math.abs(v))}`}
+            hint={
+              m.netProfitWindow.available
+                ? m.sharedExcludedCents > 0
+                  ? // Without this the tile reads "Net profit $166K" for one
+                    // platform while the company is burning — true of its
+                    // direct costs, badly misleading on its own.
+                    `Direct costs only · excludes ${compactMoney(m.sharedExcludedCents)} shared overhead`
+                  : m.windowMonthCount > 0
+                    ? `${compactMoney(Math.abs(m.netProfitWindow.value / m.windowMonthCount))} per month`
+                    : undefined
+                : undefined
+            }
+          />
+
+          <StatTile
+            label="Runway"
+            {...tilePick("runway")}
+            metric={m.runwayMonths}
+            format={(v) => `${v.toFixed(1)} mo`}
+            hint={
+              m.runwayMonths.available
+                ? m.sharedExcludedCents > 0
+                  ? "Cash ÷ burn · direct costs only, so this overstates"
+                  : "Cash on hand ÷ current burn"
+                : undefined
+            }
+          />
+
+          <StatTile
+            label="Gross margin"
+            {...tilePick("margin")}
+            metric={m.grossMargin}
+            format={(v) => percent(v, 1)}
+            hint={
+              m.grossMargin.available
+                ? "Revenue less hosting, payment fees and support"
+                : undefined
+            }
+          />
+        </div>
+
+        {/* Expense breakdown, beside revenue per employee ---------------- */}
+        <div className="grid gap-4 lg:grid-cols-3 mb-4">
+          <div className="lg:col-span-2">
+            <ExpensesCard m={m} windowLabel={m.windowLabel} />
+          </div>
+          <StatTile
+            label="Revenue per employee"
+            {...tilePick("revPerEmployee")}
+            metric={m.revenuePerEmployee}
+            format={(v) => `${compactMoney(v)}/yr`}
+            hint={
+              m.revenuePerEmployee.available && m.employees !== null
+                ? `Annual run rate across ${m.employees} employee${m.employees === 1 ? "" : "s"}`
+                : undefined
+            }
           />
         </div>
 

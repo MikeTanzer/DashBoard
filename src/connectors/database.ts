@@ -6,10 +6,14 @@ import type {
   DataDomain,
   GmvDayPoint,
   GmvPoint,
+  ExpensePoint,
+  HeadcountPoint,
 } from "@/lib/types";
 import { normalizeState } from "@/lib/states";
 import {
   CONSUMERS_BY_STATE_SQL,
+  EXPENSES_SQL,
+  HEADCOUNT_SQL,
   CONSUMERS_MONGO_COLLECTION,
   CONSUMERS_MONGO_PIPELINE,
   CONSUMERS_SQL,
@@ -302,9 +306,33 @@ export const databaseConnector: Connector = {
       if (gmvDaily.length && !provides.includes("gmv")) provides.push("gmv");
     }
 
+    let expenses: ExpensePoint[] | undefined;
+    if (EXPENSES_SQL && e !== "mongodb") {
+      expenses = (await query(EXPENSES_SQL)).map((r) => ({
+        month: str(r.month),
+        category: str(r.category) || "Uncategorised",
+        amountCents: num(r.amount_cents),
+        // NULL stays undefined — that's "shared", not "unknown".
+        platform: r.platform == null ? undefined : str(r.platform),
+        costOfRevenue: r.cost_of_revenue === true || r.cost_of_revenue === 1,
+      }));
+      if (expenses.length) provides.push("expenses");
+    }
+
+    let headcount: HeadcountPoint[] | undefined;
+    if (HEADCOUNT_SQL && e !== "mongodb") {
+      headcount = (await query(HEADCOUNT_SQL)).map((r) => ({
+        month: str(r.month),
+        employees: num(r.employees),
+        platform: r.platform == null ? undefined : str(r.platform),
+      }));
+    }
+
     return {
       consumers,
       customers,
+      expenses,
+      headcount,
       gmv,
       gmvDaily,
       status: {

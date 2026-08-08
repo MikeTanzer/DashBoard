@@ -6,6 +6,8 @@ import type {
   DataDomain,
   Platform,
   CashPosition,
+  ExpensePoint,
+  HeadcountPoint,
   GmvDayPoint,
   GmvPoint,
   RevenueDayPoint,
@@ -72,6 +74,8 @@ interface ApiPayload {
   revenue?: Partial<RevenuePoint>[];
   revenueDaily?: Partial<RevenueDayPoint>[];
   cash?: CashPosition[];
+  expenses?: ExpensePoint[];
+  headcount?: HeadcountPoint[];
   gmv?: GmvPoint[];
   gmvDaily?: GmvDayPoint[];
 }
@@ -159,6 +163,14 @@ export const internalApiConnector: Connector = {
     );
     if (cash.length) provides.push("cash");
 
+    const expenses = (payload.expenses ?? []).filter(
+      (e) => e && e.month && e.category && typeof e.amountCents === "number",
+    );
+    const headcount = (payload.headcount ?? []).filter(
+      (h) => h && h.month && typeof h.employees === "number",
+    );
+    if (expenses.length) provides.push("expenses");
+
     const gmv = (payload.gmv ?? []).filter(
       (g) => g && g.month && typeof g.amountCents === "number",
     );
@@ -182,6 +194,8 @@ export const internalApiConnector: Connector = {
       revenue,
       revenueDaily,
       cash,
+      expenses,
+      headcount,
       gmv,
       gmvDaily,
       platforms: payload.platforms,
