@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import {
   BUCKETS,
   DEFAULT_RANGE,
@@ -36,6 +38,7 @@ export function RangePicker({
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const popRef = useRef<HTMLDivElement>(null);
+  const isPhone = useMediaQuery("(max-width: 640px)");
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -79,7 +82,10 @@ export function RangePicker({
   const [draftTo, setDraftTo] = useState(to ?? today);
   const [error, setError] = useState<string | null>(null);
 
-  // Click-outside and Escape both close the popover.
+  // Click-outside and Escape both close it. The click-outside half is skipped
+  // on a phone: the modal is portalled to <body>, so it is never "inside"
+  // popRef and every tap on it would read as an outside click and close it.
+  // The backdrop handles dismissal there instead.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -88,13 +94,23 @@ export function RangePicker({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", onDown);
+    if (!isPhone) document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, isPhone]);
+
+  // Stop the page scrolling behind the modal.
+  useEffect(() => {
+    if (!open || !isPhone) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open, isPhone]);
 
   const push = (params: URLSearchParams) => {
     const qs = params.toString();
@@ -152,6 +168,56 @@ export function RangePicker({
     push(params);
   };
 
+  /**
+   * The form itself, shared by both presentations. On a phone it's a centred
+   * modal portalled to <body>; on a larger screen it stays a popover anchored
+   * to the button.
+   */
+  const formBody = (
+    <>
+      <div className="date-fields">
+        <label className="flex flex-col gap-1.5 flex-1">
+          <span className="eyebrow">From</span>
+          <input
+            type="date"
+            value={draftFrom}
+            max={draftTo || today}
+            onChange={(e) => setDraftFrom(e.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 flex-1">
+          <span className="eyebrow">To</span>
+          <input
+            type="date"
+            value={draftTo}
+            min={draftFrom || undefined}
+            max={today}
+            onChange={(e) => setDraftTo(e.target.value)}
+          />
+        </label>
+      </div>
+
+      {error ? (
+        <p className="date-note" style={{ color: "var(--status-critical)" }}>
+          {error}
+        </p>
+      ) : (
+        <p className="date-note" style={{ color: "var(--text-muted)" }}>
+          Spans under ~10 weeks chart by day, longer ones by month.
+        </p>
+      )}
+
+      <div className="date-actions">
+        <button className="btn-quiet" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+        <button className="btn-primary" onClick={applyCustom}>
+          Apply
+        </button>
+      </div>
+    </>
+  );
+
   return (
     <div
       ref={scrollRef}
@@ -206,56 +272,55 @@ export function RangePicker({
           {range === "custom" && from && to ? `${from} → ${to}` : "Custom"}
         </button>
 
-        {open ? (
+        {open && !isPhone ? (
           <div className="date-pop" role="dialog" aria-label="Custom time range">
-            <div className="flex gap-3">
-              <label className="flex flex-col gap-1.5 flex-1">
-                <span className="eyebrow">From</span>
-                <input
-                  type="date"
-                  value={draftFrom}
-                  max={draftTo || today}
-                  onChange={(e) => setDraftFrom(e.target.value)}
-                />
-              </label>
-              <label className="flex flex-col gap-1.5 flex-1">
-                <span className="eyebrow">To</span>
-                <input
-                  type="date"
-                  value={draftTo}
-                  min={draftFrom || undefined}
-                  max={today}
-                  onChange={(e) => setDraftTo(e.target.value)}
-                />
-              </label>
-            </div>
-
-            {error ? (
-              <p
-                className="text-xs mt-2.5"
-                style={{ color: "var(--status-critical)" }}
-              >
-                {error}
-              </p>
-            ) : (
-              <p
-                className="text-[11px] mt-2.5"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Spans under ~10 weeks chart by day, longer ones by month.
-              </p>
-            )}
-
-            <div className="flex justify-end gap-2 mt-3">
-              <button className="btn-quiet" onClick={() => setOpen(false)}>
-                Cancel
-              </button>
-              <button className="btn-primary" onClick={applyCustom}>
-                Apply
-              </button>
-            </div>
+            {formBody}
           </div>
         ) : null}
+
+        {/* Portalled to <body> on a phone. The button lives inside the
+            horizontally scrolling control row, and an absolutely positioned
+            panel in there is clipped by that row's overflow AND pushed off the
+            right edge of a 375px screen — the picker was simply unreachable.
+            A fixed, portalled modal is outside both problems. */}
+        {open && isPhone
+          ? createPortal(
+              <div
+                className="date-modal-backdrop"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setOpen(false);
+                }}
+              >
+                <div
+                  className="date-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Custom time range"
+                >
+                  <div className="date-modal-head">
+                    <h2>Custom range</h2>
+                    <button
+                      type="button"
+                      className="date-modal-close"
+                      onClick={() => setOpen(false)}
+                      aria-label="Close"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+                        <path
+                          d="M1.5 1.5l9 9M10.5 1.5l-9 9"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                  {formBody}
+                </div>
+              </div>,
+              document.body,
+            )
+          : null}
       </div>
     </div>
   );

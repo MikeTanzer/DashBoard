@@ -153,6 +153,8 @@ export interface DashboardMetrics {
   windowLabel: string;
   /** The columns the chart plots for this range. */
   bars: Metric<Bar[]>;
+  /** Calendar months the plotted window covers — 0 for day-grain windows. */
+  windowMonthCount: number;
   /** Sum of `bars` — the headline figure. */
   windowTotal: Metric<number>;
   windowUsageShare: Metric<number>;
@@ -278,9 +280,28 @@ export function computeMetrics(
     if (n !== undefined) entry.consumers = n;
   }
 
+  // A state can hold shoppers without holding a customer — someone in New
+  // Jersey ordering from a storefront in New York. The list was built purely
+  // from customer addresses, so those states were dropped and the consumer map
+  // silently undercounted (33k of 1.16M in the demo data). They join the list
+  // with zero customers; `stateCount` below still counts customer states only.
+  for (const [code, n] of consumersByState) {
+    if (byState.has(code)) continue;
+    byState.set(code, {
+      code,
+      name: STATE_NAMES[code] ?? code,
+      customers: 0,
+      mrrCents: 0,
+      consumers: n,
+      gmvCents: null,
+    });
+  }
+
   const stateList = [...byState.values()].sort(
     (a, b) => b.customers - a.customers || a.name.localeCompare(b.name),
   );
+  /** States holding at least one CUSTOMER — what "19 of 51" counts. */
+  const customerStateCount = stateList.filter((s) => s.customers > 0).length;
 
   // --- Current MRR ----------------------------------------------------------
   const saasCents = sum(customers, (c) => c.mrrSaasCents);
@@ -929,6 +950,7 @@ export function computeMetrics(
       : unavailable(NEEDS_CASH),
     cashAsOf,
 
+    windowMonthCount: windowMonths.size,
     tileSeries,
     consumerRecency: recency,
     consumerRecencyByState,
@@ -939,10 +961,10 @@ export function computeMetrics(
 
     stateCount: !hasCustomers
       ? unavailable(NEEDS_CUSTOMERS)
-      : stateList.length === 0
+      : customerStateCount === 0
         ? unavailable(NEEDS_STATE)
         : available(
-            stateList.length,
+            customerStateCount,
             customersWithoutState
               ? `${customersWithoutState} customer${customersWithoutState === 1 ? "" : "s"} missing a state`
               : undefined,

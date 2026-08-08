@@ -24,6 +24,9 @@ import { useElementWidth } from "@/lib/useElementWidth";
 
 type View = "map" | "bars" | "table";
 
+/** Which population the map, bars and table are measuring. */
+type Dimension = "customers" | "consumers";
+
 interface Props {
   data: StateCount[];
   customersWithoutState: number;
@@ -40,6 +43,8 @@ interface Props {
   recencyByState?: Record<string, Metric<RecencyBand[]>>;
   /** Set when the source can't break recency down by state, with the reason. */
   stateRecencyUnavailable?: string | null;
+  /** Calendar months the window covers, for the per-month tooltip rows. */
+  windowMonthCount?: number;
 }
 
 /**
@@ -113,9 +118,36 @@ export function StatesCard({
   stateRecencyUnavailable,
   gmvWindowLabel,
   gmvUnavailable,
+  windowMonthCount = 0,
 }: Props) {
   const [view, setView] = useState<View>("map");
+  const [dim, setDim] = useState<Dimension>("customers");
   const [rawPicked, setPicked] = useState<string | null>(null);
+
+  /**
+   * Consumers per state only exist when the source groups them that way. If
+   * nothing does, the toggle is disabled rather than switching to a map of
+   * zeroes — an all-empty choropleth reads as "no shoppers anywhere" rather
+   * than "not measured".
+   */
+  const hasConsumerDim = data.some((d) => d.consumers !== null);
+  const activeDim: Dimension = hasConsumerDim ? dim : "customers";
+
+  const valueOf = (d: StateCount) =>
+    activeDim === "customers" ? d.customers : (d.consumers ?? 0);
+
+  // Re-sorted per dimension: the ranking that matters for bars and the table
+  // is the one being measured, and the biggest customer state is not
+  // necessarily the biggest consumer state.
+  const ranked = useMemo(
+    () =>
+      [...data].sort((a, b) =>
+        activeDim === "customers"
+          ? b.customers - a.customers
+          : (b.consumers ?? 0) - (a.consumers ?? 0),
+      ),
+    [data, activeDim],
+  );
   const [hover, setHover] = useState<{
     x: number;
     y: number;
@@ -127,7 +159,18 @@ export function StatesCard({
     () => new Map(data.map((d) => [d.code, d])),
     [data],
   );
-  const bins = useMemo(() => makeBins(data.map((d) => d.customers)), [data]);
+  // Bins follow the active dimension — customer counts run 1-42 while consumer
+  // counts run into the hundreds of thousands, so one set of breaks cannot
+  // serve both.
+  const bins = useMemo(
+    () =>
+      makeBins(
+        data.map((d) =>
+          activeDim === "customers" ? d.customers : (d.consumers ?? 0),
+        ),
+      ),
+    [data, activeDim],
+  );
 
   /** Ramp step number for a count, or 0 for "no customers here". */
   const bin = (count: number) => {
@@ -197,13 +240,30 @@ export function StatesCard({
   return (
     <section className="card p-6" ref={wrapRef} style={{ position: "relative" }}>
       <header className="mb-1">
-        <h2 className="text-[15px] font-bold">Customers by state</h2>
+        <h2 className="text-[15px] font-bold">
+          {activeDim === "customers" ? "Customers" : "Consumers"} by state
+        </h2>
         <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
-          {data.length} state{data.length === 1 ? "" : "s"} with at least one
-          customer
-          {customersWithoutState > 0
-            ? ` · ${customersWithoutState} customer${customersWithoutState === 1 ? "" : "s"} missing a state`
-            : ""}
+          {activeDim === "customers" ? (
+            <>
+              {/* Counted, not data.length: the list now also carries states
+                  that hold shoppers but no customer. */}
+              {data.filter((d) => d.customers > 0).length} state
+              {data.filter((d) => d.customers > 0).length === 1 ? "" : "s"} with
+              at least one customer
+              {customersWithoutState > 0
+                ? ` · ${customersWithoutState} customer${customersWithoutState === 1 ? "" : "s"} missing a state`
+                : ""}
+            </>
+          ) : (
+            <>
+              {fullNumber(
+                data.reduce((a, d) => a + (d.consumers ?? 0), 0),
+              )}{" "}
+              tracked shoppers across {data.filter((d) => (d.consumers ?? 0) > 0).length}{" "}
+              states · they shop on our customers&apos; storefronts
+            </>
+          )}
         </p>
       </header>
 
@@ -219,27 +279,61 @@ export function StatesCard({
               <Choropleth
                 byCode={byCode}
                 bin={bin}
+                valueOf={valueOf}
+                dim={activeDim}
                 onHover={showTip}
                 onLeave={() => setHover(null)}
                 picked={picked}
                 onPick={pick}
               />
-              <ScaleLegend bins={bins} />
+              <ScaleLegend bins={bins} dim={activeDim} />
             </>
           ) : view === "bars" ? (
             <Bars
-              data={data}
+              data={ranked}
+              valueOf={valueOf}
+              dim={activeDim}
               onHover={showTip}
               onLeave={() => setHover(null)}
               picked={picked}
               onPick={pick}
             />
           ) : (
-            <Table data={data} picked={picked} onPick={pick} />
+            <Table
+              data={ranked}
+              dim={activeDim}
+              hasConsumers={hasConsumerDim}
+              picked={picked}
+              onPick={pick}
+            />
           )}
         </div>
 
         <aside className="states-side">
+          <div className="seg" role="tablist" aria-label="Measure">
+            <button
+              role="tab"
+              aria-selected={activeDim === "customers"}
+              onClick={() => setDim("customers")}
+            >
+              Customers
+            </button>
+            <button
+              role="tab"
+              aria-selected={activeDim === "consumers"}
+              onClick={() => hasConsumerDim && setDim("consumers")}
+              disabled={!hasConsumerDim}
+              title={
+                hasConsumerDim
+                  ? "Shoppers on our customers' storefronts"
+                  : "No source breaks consumers down by state yet — add a consumersByState map to the consumer rollup."
+              }
+              style={hasConsumerDim ? undefined : { opacity: 0.45 }}
+            >
+              Consumers
+            </button>
+          </div>
+
           <ViewToggle view={view} onChange={setView} />
 
           {recency?.length ? (
@@ -285,11 +379,36 @@ export function StatesCard({
           role="status"
         >
           <div className="font-semibold mb-1">{hover.state.name}</div>
+
+          {/* Two groups, split by a rule: what WE bill above, what shoppers
+              spend on our customers' storefronts below. The two are an order of
+              magnitude apart and mixing them in one list invited reading a GMV
+              figure as revenue. */}
           <TipRow
             label="Customers"
             value={fullNumber(hover.state.customers)}
           />
           <TipRow label="MRR" value={`${money(hover.state.mrrCents)}/mo`} />
+          <TipRow
+            label={
+              windowMonthCount > 0
+                ? `Revenue · ${gmvWindowLabel ?? "window"} (est.)`
+                : "Revenue (est.)"
+            }
+            // NOT a collected figure: revenue isn't broken down by state
+            // anywhere in the data, so this is the recurring rate projected
+            // across the window. Marked "est." because usage billing varies
+            // month to month and this can't see that.
+            value={
+              windowMonthCount > 0
+                ? compactMoney(hover.state.mrrCents * windowMonthCount)
+                : "needs a longer window"
+            }
+            dim={windowMonthCount === 0}
+          />
+
+          <div className="tip-rule" />
+
           <TipRow
             label="Consumers"
             value={
@@ -300,7 +419,18 @@ export function StatesCard({
             dim={hover.state.consumers === null}
           />
           <TipRow
-            label={gmvWindowLabel ? `GMV · ${gmvWindowLabel}` : "GMV"}
+            label="GMV · monthly avg"
+            value={
+              hover.state.gmvCents !== null && windowMonthCount > 0
+                ? compactMoney(hover.state.gmvCents / windowMonthCount)
+                : hover.state.gmvCents === null
+                  ? (gmvUnavailable ?? "not tracked by state")
+                  : "needs a full month"
+            }
+            dim={hover.state.gmvCents === null || windowMonthCount === 0}
+          />
+          <TipRow
+            label={gmvWindowLabel ? `GMV · ${gmvWindowLabel}` : "GMV total"}
             value={
               hover.state.gmvCents !== null
                 ? compactMoney(hover.state.gmvCents)
@@ -344,6 +474,8 @@ function TipRow({
 function Choropleth({
   byCode,
   bin,
+  valueOf,
+  dim,
   onHover,
   onLeave,
   picked,
@@ -351,6 +483,8 @@ function Choropleth({
 }: {
   byCode: Map<string, StateCount>;
   bin: (n: number) => number;
+  valueOf: (d: StateCount) => number;
+  dim: Dimension;
   onHover: (e: React.PointerEvent | React.MouseEvent, s: StateCount) => void;
   onLeave: () => void;
   picked: string | null;
@@ -369,7 +503,7 @@ function Choropleth({
         {/* Shapes first, labels after, so no neighbour paints over a label. */}
         {Object.entries(STATE_PATHS).map(([code, d]) => {
           const stat = byCode.get(code);
-          const count = stat?.customers ?? 0;
+          const count = stat ? valueOf(stat) : 0;
           const empty = count <= 0;
           return (
             <path
@@ -391,8 +525,8 @@ function Choropleth({
               role="img"
               aria-label={`${STATE_NAMES[code] ?? code} — ${
                 empty
-                  ? "no customers"
-                  : `${count} customer${count === 1 ? "" : "s"}`
+                  ? `no ${dim}`
+                  : `${count} ${count === 1 ? dim.slice(0, -1) : dim}`
               }`}
             />
           );
@@ -415,7 +549,7 @@ function Choropleth({
         ) : null}
 
         {[...byCode.values()].map((stat) => {
-          const b = bin(stat.customers);
+          const b = bin(valueOf(stat));
           const pos = STATE_LABEL_POS[stat.code];
           if (!pos) return null;
 
@@ -441,7 +575,7 @@ function Choropleth({
                   fill={ink(b)}
                   opacity={0.85}
                 >
-                  {stat.customers}
+                  {dim === "customers" ? stat.customers : compactNumber(valueOf(stat))}
                 </text>
               </g>
             );
@@ -472,7 +606,9 @@ function Choropleth({
                 <tspan fontWeight={600} fill="var(--text-primary)">
                   {stat.code}
                 </tspan>
-                <tspan dx={4}>{stat.customers}</tspan>
+                <tspan dx={4}>
+                  {dim === "customers" ? stat.customers : compactNumber(valueOf(stat))}
+                </tspan>
               </text>
             </g>
           );
@@ -523,14 +659,14 @@ function StateChip({ code, onClear }: { code: string; onClear: () => void }) {
   );
 }
 
-function ScaleLegend({ bins }: { bins: Bin[] }) {
+function ScaleLegend({ bins, dim }: { bins: Bin[]; dim: Dimension }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-3">
       <span
         className="text-[11px] uppercase tracking-wider"
         style={{ color: "var(--text-muted)" }}
       >
-        Customers
+        {dim === "customers" ? "Customers" : "Consumers"}
       </span>
       {bins.map((b, i) => (
         <span key={`${b.min}-${b.max}`} className="flex items-center gap-1.5">
@@ -548,7 +684,13 @@ function ScaleLegend({ bins }: { bins: Bin[] }) {
             className="text-[11px]"
             style={{ color: "var(--text-secondary)" }}
           >
-            {b.min === b.max ? b.min : `${b.min}–${b.max}`}
+            {dim === "customers"
+              ? b.min === b.max
+                ? b.min
+                : `${b.min}–${b.max}`
+              : b.min === b.max
+                ? compactNumber(b.min)
+                : `${compactNumber(b.min)}–${compactNumber(b.max)}`}
           </span>
         </span>
       ))}
@@ -574,12 +716,16 @@ function ScaleLegend({ bins }: { bins: Bin[] }) {
 
 function Bars({
   data,
+  valueOf,
+  dim,
   onHover,
   onLeave,
   picked,
   onPick,
 }: {
   data: StateCount[];
+  valueOf: (d: StateCount) => number;
+  dim: Dimension;
   onHover: (e: React.PointerEvent | React.MouseEvent, s: StateCount) => void;
   onLeave: () => void;
   picked: string | null;
@@ -593,7 +739,7 @@ function Bars({
   // the footnote only appears if it actually bites.
   const MAX_ROWS = 20;
   const top = data.slice(0, MAX_ROWS);
-  const max = Math.max(1, ...top.map((d) => d.customers));
+  const max = Math.max(1, ...top.map(valueOf));
   const ticks = axisTicks(max, 4);
   const scaleMax = ticks[ticks.length - 1] || max;
 
@@ -630,7 +776,7 @@ function Bars({
 
         {top.map((d, i) => {
           const y = i * rowH + (rowH - barH) / 2;
-          const bw = Math.max(2, (d.customers / scaleMax) * plotW);
+          const bw = Math.max(2, (valueOf(d) / scaleMax) * plotW);
           return (
             <g
               key={d.code}
@@ -677,7 +823,7 @@ function Bars({
                 fill="var(--text-primary)"
                 style={{ fontVariantNumeric: "tabular-nums" }}
               >
-                {d.customers}
+                {dim === "customers" ? d.customers : compactNumber(valueOf(d))}
               </text>
             </g>
           );
@@ -714,10 +860,14 @@ function Bars({
 
 function Table({
   data,
+  dim,
+  hasConsumers,
   picked,
   onPick,
 }: {
   data: StateCount[];
+  dim: Dimension;
+  hasConsumers: boolean;
   picked: string | null;
   onPick: (code: string) => void;
 }) {
@@ -727,7 +877,16 @@ function Table({
         <thead>
           <tr>
             <th>State</th>
-            <th className="num">Customers</th>
+            {/* Both populations stay in the table whichever one is selected —
+                comparing them is the point of a table. The active one leads. */}
+            <th className="num">
+              {dim === "customers" ? "Customers" : "Consumers"}
+            </th>
+            {hasConsumers ? (
+              <th className="num">
+                {dim === "customers" ? "Consumers" : "Customers"}
+              </th>
+            ) : null}
             <th className="num">MRR</th>
           </tr>
         </thead>
@@ -750,7 +909,18 @@ function Table({
               className="row-pick"
             >
               <td>{d.name}</td>
-              <td className="num">{fullNumber(d.customers)}</td>
+              <td className="num">
+                {dim === "customers"
+                  ? fullNumber(d.customers)
+                  : compactNumber(d.consumers ?? 0)}
+              </td>
+              {hasConsumers ? (
+                <td className="num">
+                  {dim === "customers"
+                    ? compactNumber(d.consumers ?? 0)
+                    : fullNumber(d.customers)}
+                </td>
+              ) : null}
               <td className="num">{money(d.mrrCents)}</td>
             </tr>
           ))}

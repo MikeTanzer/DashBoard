@@ -68,7 +68,23 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
    */
   const [tile, setTile] = useState<TileKey | null>("arpc");
   const pickTile = (k: TileKey) => setTile((cur) => (cur === k ? null : k));
-  const activeSeries = tile ? m.tileSeries[tile] : null;
+
+  /**
+   * Selection props for a tile, but ONLY when its series has something to
+   * plot. A tile with no history isn't offered as a control at all — no
+   * pointer, no hover shading, no click — because a control whose entire
+   * effect is to display an error is worse than no control. The tile still
+   * shows its current value; it just doesn't pretend to be a chart source.
+   */
+  const tilePick = (k: TileKey) =>
+    m.tileSeries[k].points.available
+      ? { selected: tile === k, onSelect: () => pickTile(k) }
+      : {};
+
+  // Falls back to the revenue chart if the default selection turns out to be
+  // unplottable for this data (no customer start dates, say).
+  const activeSeries =
+    tile && m.tileSeries[tile].points.available ? m.tileSeries[tile] : null;
 
   const scopeLabel =
     selected.length === 0
@@ -164,8 +180,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               The range drives arrivals, which we CAN compute exactly. */}
           <StatTile
             label="Current customers"
-            selected={tile === "customers"}
-            onSelect={() => pickTile("customers")}
+            {...tilePick("customers")}
             metric={m.customerCount}
             format={fullNumber}
             hint={
@@ -179,8 +194,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               selected window can, and that's the half worth acting on. */}
           <StatTile
             label="Consumers tracked"
-            selected={tile === "consumers"}
-            onSelect={() => pickTile("consumers")}
+            {...tilePick("consumers")}
             metric={m.consumersTracked}
             format={compactNumber}
             note="All time"
@@ -198,8 +212,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           />
           <StatTile
             label="States with customers"
-            selected={tile === "states"}
-            onSelect={() => pickTile("states")}
+            {...tilePick("states")}
             metric={m.stateCount}
             format={(v) => `${v} of 51`}
             hint={
@@ -220,8 +233,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
                 : `Purchased in ${m.consumerWindowLabel}`
             }
             metric={m.consumersPurchased}
-            selected={tile === "purchasers"}
-            onSelect={() => pickTile("purchasers")}
+            {...tilePick("purchasers")}
             format={compactNumber}
             hint={
               m.consumersPurchased.available && m.consumersTracked.available
@@ -235,8 +247,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
         <div className="grid grid-cols-2 gap-4 max-[640px]:gap-2.5 lg:grid-cols-4 mb-6">
           <RevenuePerCustomer
             m={m}
-            selected={tile === "arpc"}
-            onSelect={() => pickTile("arpc")}
+            {...tilePick("arpc")}
           />
 
           {/* A balance, not a flow: it doesn't move with the time range, so no
@@ -244,8 +255,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               stale balance looks identical to a current one. */}
           <StatTile
             label="Cash on hand"
-            selected={tile === "cash"}
-            onSelect={() => pickTile("cash")}
+            {...tilePick("cash")}
             metric={m.cashOnHand}
             format={(v) => money(v)}
             hint={
@@ -262,8 +272,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               hint both work to keep the two from being read as the same thing. */}
           <StatTile
             label={`GMV · ${m.windowLabel}`}
-            selected={tile === "gmv"}
-            onSelect={() => pickTile("gmv")}
+            {...tilePick("gmv")}
             metric={m.gmvWindow}
             format={(v) => compactMoney(v)}
             hint={
@@ -275,8 +284,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
 
           <StatTile
             label="Revenue change"
-            selected={tile === "change"}
-            onSelect={() => pickTile("change")}
+            {...tilePick("change")}
             metric={m.revenueChange}
             format={(v) => `${v >= 0 ? "+" : ""}${percent(v, 1)}`}
             hint={`Complete periods only · vs ${priorPhrase(range)}`}
@@ -297,6 +305,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               stateRecencyUnavailable={m.stateRecencyUnavailable}
               gmvWindowLabel={m.windowLabel}
               gmvUnavailable={m.stateGmvUnavailable}
+              windowMonthCount={m.windowMonthCount}
             />
           ) : (
             <EmptyCard

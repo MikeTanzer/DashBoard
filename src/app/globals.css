@@ -629,6 +629,95 @@ h3 {
   padding: 16px;
 }
 
+/* Two columns side by side while there's room; stacked once there isn't.
+   Two date inputs on a 375px screen leave ~140px each, and a mm/dd/yyyy field
+   plus its calendar button needs more than that — they were squeezing. */
+.date-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 420px) {
+  .date-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.date-note {
+  margin-top: 10px;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.date-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* --- Phone: a real modal ---------------------------------------------------
+   The Custom button sits inside the horizontally scrolling control row, so an
+   absolutely positioned panel is clipped by that row's overflow and pushed off
+   the right edge of the screen. Fixed positioning in a body portal sidesteps
+   both. */
+.date-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(2, 18, 50, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+.date-modal {
+  width: 100%;
+  max-width: 360px;
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px -18px rgba(2, 18, 50, 0.7);
+  padding: 16px;
+}
+
+.date-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.date-modal-head h2 {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.date-modal-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  /* 32px: comfortably past the 24px minimum for a touch target. */
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.date-modal-close:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+
+.date-modal input[type="date"],
 .date-pop input[type="date"] {
   width: 100%;
   border: 1px solid var(--border);
@@ -646,6 +735,7 @@ h3 {
   appearance: none;
   min-height: 42px;
 }
+.date-modal input[type="date"]:focus,
 .date-pop input[type="date"]:focus {
   outline: 2px solid var(--coral);
   outline-offset: 1px;
@@ -804,6 +894,13 @@ a:focus-visible {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+/* Splits the tooltip into what we bill and what shoppers spend. */
+.viz-tooltip .tip-rule {
+  height: 1px;
+  margin: 6px 0;
+  background: rgba(255, 255, 255, 0.18);
+}
+
 .viz-tooltip .tip-dim {
   opacity: 0.78;
   font-weight: 400;
