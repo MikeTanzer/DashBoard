@@ -7,6 +7,9 @@ import type {
   Platform,
   CashPosition,
   ExpensePoint,
+  ExpenseDayPoint,
+  ConsumerHistoryPoint,
+  CashHistoryPoint,
   HeadcountPoint,
   GmvDayPoint,
   GmvPoint,
@@ -75,6 +78,9 @@ interface ApiPayload {
   revenueDaily?: Partial<RevenueDayPoint>[];
   cash?: CashPosition[];
   expenses?: ExpensePoint[];
+  expensesDaily?: ExpenseDayPoint[];
+  consumersMonthly?: ConsumerHistoryPoint[];
+  cashMonthly?: CashHistoryPoint[];
   headcount?: HeadcountPoint[];
   gmv?: GmvPoint[];
   gmvDaily?: GmvDayPoint[];
@@ -169,6 +175,15 @@ export const internalApiConnector: Connector = {
     const headcount = (payload.headcount ?? []).filter(
       (h) => h && h.month && typeof h.employees === "number",
     );
+    const expensesDaily = (payload.expensesDaily ?? []).filter(
+      (e) => e && e.date && e.category && typeof e.amountCents === "number",
+    );
+    const consumersMonthly = (payload.consumersMonthly ?? []).filter(
+      (c) => c && c.month && typeof c.tracked === "number",
+    );
+    const cashMonthly = (payload.cashMonthly ?? []).filter(
+      (c) => c && c.month && typeof c.amountCents === "number",
+    );
     if (expenses.length) provides.push("expenses");
 
     const gmv = (payload.gmv ?? []).filter(
@@ -195,6 +210,9 @@ export const internalApiConnector: Connector = {
       revenueDaily,
       cash,
       expenses,
+      expensesDaily,
+      consumersMonthly,
+      cashMonthly,
       headcount,
       gmv,
       gmvDaily,

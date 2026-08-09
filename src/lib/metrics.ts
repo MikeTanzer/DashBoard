@@ -550,11 +550,19 @@ export function computeMetrics(
 
   const revenueChange = dailyMissing
     ? unavailable(NEEDS_DAILY_REVENUE)
-    : cmpPrior.length === cmpTake && cmpWindow.length === cmpTake && cmpPriorSum > 0
-      ? available((cmpWindowSum - cmpPriorSum) / cmpPriorSum)
-      : unavailable(
-          `Needs ${cmpTake * 2} complete ${dayGrain ? "days" : "months"} of history to compare this window against the one before it. There ${completeRows.length === 1 ? "is" : "are"} ${completeRows.length}.`,
-        );
+    : range.count === Infinity && !range.from
+      ? // "All time" has nothing before it, by definition. The history message
+        // below would name a number of months that, once reached, would simply
+        // grow again — an ask that can never be satisfied reads as a data gap
+        // when it's really a category error.
+        unavailable(
+          "All time has no period before it to compare against. Pick a bounded range — 3M, 12M or a custom window — to see a change.",
+        )
+      : cmpPrior.length === cmpTake && cmpWindow.length === cmpTake && cmpPriorSum > 0
+        ? available((cmpWindowSum - cmpPriorSum) / cmpPriorSum)
+        : unavailable(
+            `Needs ${cmpTake * 2} complete ${dayGrain ? "days" : "months"} of history to compare this window against the one before it. There ${completeRows.length === 1 ? "is" : "are"} ${completeRows.length}.`,
+          );
 
   // --- New customers in the window -----------------------------------------
   // Exact: `startedAt` is the first payment date. Note this is arrivals, not
@@ -819,9 +827,24 @@ export function computeMetrics(
   const expenseInScope = (e: { platform?: PlatformId }) =>
     !platformFilter ? true : e.platform !== undefined && platformFilter.includes(e.platform);
 
-  const expensesInWindow = snapshot.expenses.filter((e) =>
-    windowMonths.has(e.month),
+  /**
+   * The days a day-grain window covers, taken from the plotted rows so the
+   * expense window is byte-for-byte the revenue window.
+   */
+  const windowDays = new Set(
+    windowRows.filter((r) => "date" in r).map((r) => (r as DayRevenue).date),
   );
+  const dayGrainWindow = windowDays.size > 0;
+
+  /**
+   * Expenses for the window, read off whichever series matches its grain —
+   * exactly how revenue and GMV already work. A 1W window reads dated expense
+   * rows; anything monthly reads the monthly ones.
+   */
+  const expensesInWindow: { category: string; amountCents: number; platform?: PlatformId; costOfRevenue?: boolean }[] =
+    dayGrainWindow
+      ? snapshot.expensesDaily.filter((e) => windowDays.has(e.date))
+      : snapshot.expenses.filter((e) => windowMonths.has(e.month));
   const scopedExpenses = expensesInWindow.filter(expenseInScope);
   const sharedExcludedCents = platformFilter
     ? expensesInWindow
@@ -830,13 +853,18 @@ export function computeMetrics(
     : 0;
 
   const hasExpenses = snapshot.expenses.length > 0;
-  // Expenses are booked monthly, so a 1W or 1M window (which reads the daily
-  // revenue series) has no month to line up against. Saying so beats showing a
-  // whole month's costs against seven days of revenue.
+  /**
+   * A day-grain window needs dated expense rows. With them, 1W and 1M work
+   * like every other range; without them the window has nothing to line up
+   * against and says so rather than setting a whole month of costs against
+   * seven days of revenue.
+   */
   const expensesNeedMonths =
-    windowMonths.size === 0
-      ? "Expenses are recorded by month, so a day-level window has nothing to line up against. Switch to 3M or wider."
-      : null;
+    dayGrainWindow && snapshot.expensesDaily.length === 0
+      ? "Expenses are recorded by month, so a day-level window has nothing to line up against. Add an `expensesDaily` series, or switch to 3M or wider."
+      : !dayGrainWindow && windowMonths.size === 0
+        ? "No months in this window to total expenses over."
+        : null;
 
   const NEEDS_EXPENSES =
     "Add an `expenses` array to data/network.json (month, category, amountCents, optional platform and costOfRevenue), or have the admin API return one.";
@@ -852,20 +880,26 @@ export function computeMetrics(
       ? unavailable(expensesNeedMonths)
       : available(expensesWindowCents);
 
-  /** Revenue for exactly the months the expenses cover, so the two are comparable. */
-  const revenueForExpenseMonths = windowRows
-    .filter((r) => !("date" in r))
-    .reduce((a, r) => a + r.totalCents, 0);
+  /** Revenue over exactly the span the expenses cover, so the two compare. */
+  const revenueForExpenseMonths = windowRows.reduce(
+    (a, r) => a + r.totalCents,
+    0,
+  );
+
+  const netForWindow = revenueForExpenseMonths - expensesWindowCents;
 
   const netProfitWindow: Metric<number> =
     !hasExpenses || expensesNeedMonths
       ? (expensesWindow as Metric<number>)
-      : available(revenueForExpenseMonths - expensesWindowCents);
+      : available(netForWindow);
 
   /** Average net per month across the window. Negative means burning. */
-  const monthlyNetCents =
-    windowMonths.size > 0
-      ? (revenueForExpenseMonths - expensesWindowCents) / windowMonths.size
+  const monthlyNetCents = dayGrainWindow
+    // Scaled to a month so runway stays in months whatever window is selected —
+    // a 7-day net divided into cash would read as years.
+    ? (netForWindow / windowDays.size) * 30.44
+    : windowMonths.size > 0
+      ? netForWindow / windowMonths.size
       : 0;
 
   // Both computed here rather than reused: the cash total and the run rate are
@@ -963,7 +997,12 @@ export function computeMetrics(
     r: MonthRevenue | DayRevenue,
     cogsOnly = false,
   ): number => {
-    if ("date" in r) return 0;
+    if ("date" in r) {
+      return snapshot.expensesDaily
+        .filter((e) => e.date === r.date && expenseInScope(e))
+        .filter((e) => (cogsOnly ? e.costOfRevenue : true))
+        .reduce((a, e) => a + e.amountCents, 0);
+    }
     const span = monthSpan(r.month);
     const [sy, sm] = span.start.split("-").map(Number);
     const [ey, em] = span.end.split("-").map(Number);
@@ -980,6 +1019,29 @@ export function computeMetrics(
       .filter((e) => months.has(e.month) && expenseInScope(e))
       .filter((e) => (cogsOnly ? e.costOfRevenue : true))
       .reduce((a, e) => a + e.amountCents, 0);
+  };
+
+  /** Consumer history summed across in-scope platforms, for a plotted row. */
+  const consumerHistoryAt = (
+    r: MonthRevenue | DayRevenue,
+    pick: (c: { tracked: number; purchasers: Record<string, number> }) => number,
+  ): number => {
+    // A day row takes its month's figure — the rollup is monthly, and holding
+    // a month's value flat across its days is what the source actually says.
+    const key = "date" in r ? r.date.slice(0, 7) : monthSpan(r.month).end;
+    const rows = snapshot.consumersMonthly
+      .filter((c) => inScope(c.platform))
+      .filter((c) => c.month <= key);
+    if (!rows.length) return 0;
+    const last = rows[rows.length - 1].month;
+    return rows.filter((c) => c.month === last).reduce((a, c) => a + pick(c), 0);
+  };
+
+  /** Cash total as at a plotted row, carrying the last known balance forward. */
+  const cashAt = (r: MonthRevenue | DayRevenue): number => {
+    const key = "date" in r ? r.date.slice(0, 7) : monthSpan(r.month).end;
+    const rows = snapshot.cashMonthly.filter((c) => c.month <= key);
+    return rows.length ? rows[rows.length - 1].amountCents : cashTotalCents;
   };
 
   /** Headcount as at a month key, carrying the last known value forward. */
@@ -1145,9 +1207,7 @@ export function computeMetrics(
         : expensesNeedMonths
           ? unavailable(expensesNeedMonths)
           : available(
-              windowRows
-                .filter((r) => !("date" in r))
-                .map((r) => pointFrom(r, expenseTotalForRow(r))),
+              windowRows.map((r) => pointFrom(r, expenseTotalForRow(r))),
             ),
     },
 
@@ -1159,9 +1219,9 @@ export function computeMetrics(
         : expensesNeedMonths
           ? unavailable(expensesNeedMonths)
           : available(
-              windowRows
-                .filter((r) => !("date" in r))
-                .map((r) => pointFrom(r, r.totalCents - expenseTotalForRow(r))),
+              windowRows.map((r) =>
+                pointFrom(r, r.totalCents - expenseTotalForRow(r)),
+              ),
             ),
     },
 
@@ -1171,11 +1231,21 @@ export function computeMetrics(
     // reconstructable per period the same way — which is the same gap the
     // consumer tiles have.
     runway: {
-      title: "Runway over time",
+      title: "Runway over time (months)",
       format: "count",
-      points: unavailable(
-        "Runway is derived from today's cash balance, and only one balance is stored. Plotting it needs a dated series of balances — record cash on a schedule.",
-      ),
+      points:
+        !snapshot.cashMonthly.length || !hasExpenses
+          ? unavailable(
+              "Runway needs both a dated series of cash balances and expenses, so each period can be divided by its own burn.",
+            )
+          : available(
+              windowRows.map((r) => {
+                const burn = expenseTotalForRow(r) - r.totalCents;
+                // A profitable period has no burn to divide by. Zero is the
+                // honest plot point — the tile itself explains why.
+                return pointFrom(r, burn > 0 ? cashAt(r) / burn : 0);
+              }),
+            ),
     },
 
     margin: {
@@ -1190,16 +1260,14 @@ export function computeMetrics(
                 "Needs `costOfRevenue: true` on the lines that are cost of revenue.",
               )
             : available(
-                windowRows
-                  .filter((r) => !("date" in r))
-                  .map((r) =>
-                    pointFrom(
-                      r,
-                      r.totalCents > 0
-                        ? (r.totalCents - expenseTotalForRow(r, true)) / r.totalCents
-                        : 0,
-                    ),
+                windowRows.map((r) =>
+                  pointFrom(
+                    r,
+                    r.totalCents > 0
+                      ? (r.totalCents - expenseTotalForRow(r, true)) / r.totalCents
+                      : 0,
                   ),
+                ),
               ),
     },
 
@@ -1210,39 +1278,60 @@ export function computeMetrics(
         snapshot.headcount.length === 0
           ? unavailable(NEEDS_HEADCOUNT)
           : available(
-              windowRows
-                .filter((r) => !("date" in r))
-                .map((r) => {
-                  // Narrowed by the filter above, but TypeScript can't see
-                  // through it — day rows never reach here.
-                  const heads = "date" in r ? 0 : headcountAt(r.month);
-                  return pointFrom(r, heads > 0 ? (r.totalCents * 12) / heads : 0);
-                }),
+              windowRows.map((r) => {
+                const heads = headcountAt(
+                  "date" in r ? r.date.slice(0, 7) : r.month,
+                );
+                // A day of revenue annualises by 365, a month by 12.
+                const annualised =
+                  "date" in r ? r.totalCents * 365 : r.totalCents * 12;
+                return pointFrom(r, heads > 0 ? annualised / heads : 0);
+              }),
             ),
     },
 
     consumers: {
       title: "Consumers tracked over time",
       format: "count",
-      points: unavailable(
-        "The consumer rollup is a current head count with no time dimension — it says how many consumers exist now, not how many existed last March. Plotting it needs a per-period snapshot: have the consumer query group by month, or record the rollup on a schedule.",
-      ),
+      points: snapshot.consumersMonthly.length
+        ? available(
+            windowRows.map((r) =>
+              pointFrom(r, consumerHistoryAt(r, (c) => c.tracked)),
+            ),
+          )
+        : unavailable(
+            "The consumer rollup is a current head count with no time dimension — it says how many consumers exist now, not how many existed last March. Plotting it needs a per-period snapshot: have the consumer query group by month, or record the rollup on a schedule.",
+          ),
     },
 
     purchasers: {
-      title: "Purchasers over time",
+      title: `Purchasers over time · ${consumerWindowLabel(range.consumerWindow)}`,
       format: "count",
-      points: unavailable(
-        "Purchaser counts are trailing-window totals as of today, not a per-period series. Plotting them needs the consumer query to return one row per month (distinct purchasers in that month) rather than one row per platform.",
-      ),
+      points: snapshot.consumersMonthly.length
+        ? available(
+            windowRows.map((r) =>
+              pointFrom(
+                r,
+                consumerHistoryAt(
+                  r,
+                  (c) => c.purchasers[range.consumerWindow] ?? 0,
+                ),
+              ),
+            ),
+          )
+        : unavailable(
+            "Purchaser counts are trailing-window totals as of today, not a per-period series. Plotting them needs the consumer query to return one row per month (distinct purchasers in that month) rather than one row per platform.",
+          ),
     },
 
     cash: {
       title: "Cash on hand over time",
       format: "money",
-      points: unavailable(
-        "Cash on hand is a balance read at a single moment, so there's nothing to plot without history. Record the balance on a schedule and send it as a dated series.",
-      ),
+      points: snapshot.cashMonthly.length
+        ? available(windowRows.map((r) => pointFrom(r, cashAt(r))))
+        : unavailable(
+            "Cash on hand is a balance read at a single moment, so there's nothing to plot without history. Record the balance on a schedule and send it as a dated series.",
+          ),
     },
   };
 

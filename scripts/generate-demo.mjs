@@ -148,7 +148,10 @@ for (const platform of ["webjoint", "menu"]) {
 
   // i = 1 is the last COMPLETE month and is anchored exactly to current MRR.
   // i = 0 is the month in progress, billed pro-rata so far.
-  for (let i = 11; i >= 0; i--) {
+  // 30 months, not 12. Period-over-period needs a whole prior window to compare
+  // against — a 12-month view needs 24 complete months — so a 12-month history
+  // left "Revenue change" untracked on every range past 3M.
+  for (let i = 29; i >= 0; i--) {
     const d = new Date(MONTH_START);
     d.setUTCMonth(d.getUTCMonth() - i);
     const month = monthKeyOf(d);
@@ -468,7 +471,15 @@ monthsSorted.forEach((month, i) => {
   // which is where a company at this stage actually sits. An earlier draft put
   // 14-22 people against $100k of monthly revenue and the guard below caught
   // it — payroll alone was 1.5x what the network earned.
-  const employees = 8 + Math.floor(i / 2);
+  // The month in progress is only partly incurred. Revenue is already pro-rated
+  // to today, and costs that scale with revenue follow it automatically — but
+  // payroll, software and G&A are fixed monthly amounts, and booking a whole
+  // month of them against nine days of revenue made the current month look
+  // catastrophic: a 1W runway of 4.7 months against 21.8 on a 3M window.
+  const elapsed =
+    month === CURRENT_MONTH ? TODAY.getUTCDate() / DAYS_IN_MONTH : 1;
+
+  const employees = 6 + Math.floor(i / 4);
   headcount.push({ month, employees });
 
   // --- Cost of revenue: scales with each platform's own revenue -------------
@@ -504,7 +515,7 @@ monthsSorted.forEach((month, i) => {
   expenses.push({
     month,
     category: "Payroll & benefits",
-    amountCents: Math.round(employees * (9_600_00 + rand() * 900_00)),
+    amountCents: Math.round(employees * (9_600_00 + rand() * 900_00) * elapsed),
   });
   expenses.push({
     month,
@@ -514,12 +525,12 @@ monthsSorted.forEach((month, i) => {
   expenses.push({
     month,
     category: "Software & tools",
-    amountCents: Math.round(employees * (310_00 + rand() * 90_00)),
+    amountCents: Math.round(employees * (310_00 + rand() * 90_00) * elapsed),
   });
   expenses.push({
     month,
     category: "General & administrative",
-    amountCents: Math.round(19_000_00 + rand() * 6_000_00),
+    amountCents: Math.round((19_000_00 + rand() * 6_000_00) * elapsed),
   });
 });
 
@@ -534,10 +545,138 @@ for (const e of expenses) {
   const totalRev = revenue.reduce((a, r) => a + r.saasCents + r.usageCents, 0);
   const totalExp = expenses.reduce((a, e) => a + e.amountCents, 0);
   const margin = (totalRev - totalExp) / totalRev;
-  if (margin > 0.35 || margin < -0.9) {
+  // A sanity bound, not a business rule: an early-stage company legitimately
+  // spends well past what it earns, and the first two years of this series are
+  // exactly that. The bound exists to catch the class of mistake that produced
+  // -148% — payroll sized for a company an order of magnitude larger.
+  if (margin > 0.35 || margin < -1.1) {
     throw new Error(
       `demo net margin is ${(margin * 100).toFixed(1)}% — not a believable range`,
     );
+  }
+}
+
+// -- Daily expenses -----------------------------------------------------------
+// Same trick as revenueDaily: each month's category total spread across the
+// days the daily window covers, normalised so the days sum EXACTLY to the
+// month. Without this the 1W and 1M ranges had nothing to set revenue against
+// and every expense-derived tile reported itself untracked.
+//
+// Spend is spread evenly with a little noise rather than given the weekday
+// shape revenue has — a hosting bill or a salary doesn't take weekends off.
+const expensesDaily = [];
+{
+  const byMonth = new Map();
+  for (const e of expenses) {
+    if (!byMonth.has(e.month)) byMonth.set(e.month, []);
+    byMonth.get(e.month).push(e);
+  }
+
+  const daysByMonth = new Map();
+  for (let back = DAYS_OF_DAILY - 1; back >= 0; back--) {
+    const d = new Date(TODAY);
+    d.setUTCDate(d.getUTCDate() - back);
+    const month = monthKeyOf(d);
+    if (!byMonth.has(month)) continue;
+    if (!daysByMonth.has(month)) daysByMonth.set(month, []);
+    daysByMonth.get(month).push(d.toISOString().slice(0, 10));
+  }
+
+  for (const [month, days] of daysByMonth) {
+    // A month the window only partly covers would have a whole month of costs
+    // packed into a few days. Drop it, exactly as revenueDaily does. The
+    // current month is legitimately partial in both series, so it stays.
+    const first = new Date(`${days[0]}T00:00:00Z`);
+    const partialStart = first.getUTCDate() !== 1;
+    if (partialStart && month !== CURRENT_MONTH) continue;
+
+    for (const e of byMonth.get(month)) {
+      const weights = days.map(() => 0.9 + rand() * 0.2);
+      const totalWeight = weights.reduce((a, b) => a + b, 0);
+      let left = e.amountCents;
+      days.forEach((date, i) => {
+        const share =
+          i === days.length - 1
+            ? left
+            : Math.round(e.amountCents * (weights[i] / totalWeight));
+        left -= share;
+        expensesDaily.push({
+          date,
+          category: e.category,
+          amountCents: share,
+          ...(e.platform ? { platform: e.platform } : {}),
+          ...(e.costOfRevenue ? { costOfRevenue: true } : {}),
+        });
+      });
+    }
+  }
+
+  // Each month's days must sum exactly to that month's expense lines.
+  const dayTotals = new Map();
+  for (const d of expensesDaily) {
+    const m = d.date.slice(0, 7);
+    dayTotals.set(m, (dayTotals.get(m) ?? 0) + d.amountCents);
+  }
+  for (const [m, total] of dayTotals) {
+    const monthTotal = byMonth.get(m).reduce((a, e) => a + e.amountCents, 0);
+    if (total !== monthTotal) {
+      throw new Error(
+        `expensesDaily for ${m} sums to ${total}, expected ${monthTotal}`,
+      );
+    }
+  }
+}
+
+// -- Consumer history ---------------------------------------------------------
+// The live rollup is a snapshot with no past. This is the same shape recorded
+// per month, so the audience can actually be plotted: the tracked base grows
+// ~2.4%/mo backwards from today's figure, and each purchaser window keeps its
+// present-day ratio to that base.
+const consumersMonthly = [];
+{
+  const CONSUMER_GROWTH = 1.024;
+  const now = [
+    { platform: "webjoint", tracked: 812_400, rate30: 0.117 },
+    { platform: "menu", tracked: 348_900, rate30: 0.089 },
+  ];
+  monthsSorted.forEach((month, idx) => {
+    const back = monthsSorted.length - 1 - idx;
+    for (const p of now) {
+      const tracked = Math.round(p.tracked * Math.pow(CONSUMER_GROWTH, -back));
+      const p30 = Math.round(tracked * p.rate30);
+      const purchasers = {
+        7: Math.round(p30 * 0.34),
+        30: p30,
+        90: Math.round(p30 * 1.94),
+        180: Math.round(p30 * 2.86),
+        365: Math.round(p30 * 3.71),
+      };
+      purchasers.ever = Math.round(purchasers[365] * 1.28);
+      if (purchasers.ever > tracked) purchasers.ever = tracked;
+      consumersMonthly.push({ month, platform: p.platform, tracked, purchasers });
+    }
+  });
+}
+
+// -- Cash history -------------------------------------------------------------
+// One balance can't be plotted and runway can't be derived from it over time.
+// Walked backwards from today's total by each month's actual net, so the curve
+// and the burn agree instead of being two unrelated inventions.
+const cashMonthly = [];
+{
+  const CASH_TODAY = 1_842_000_00 + 214_500_00;
+  let running = CASH_TODAY;
+  for (let idx = monthsSorted.length - 1; idx >= 0; idx--) {
+    const month = monthsSorted[idx];
+    cashMonthly.unshift({ month, amountCents: Math.round(running) });
+    const rev = revenue
+      .filter((r) => r.month === month)
+      .reduce((a, r) => a + r.saasCents + r.usageCents, 0);
+    const exp = expenses
+      .filter((e) => e.month === month)
+      .reduce((a, e) => a + e.amountCents, 0);
+    // Going back in time, undo that month's net: if we burned, we had more.
+    running += exp - rev;
   }
 }
 
@@ -561,6 +700,9 @@ const payload = {
   // Cash is a balance reported by a bank or Stripe, never derived from the
   // revenue above — these are two independent figures and are meant to be.
   expenses,
+  expensesDaily,
+  consumersMonthly,
+  cashMonthly,
   headcount,
   cash: [
     {

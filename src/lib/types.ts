@@ -204,6 +204,51 @@ export interface ExpensePoint {
 }
 
 /**
+ * One day of spend. Same shape as ExpensePoint, keyed by date.
+ *
+ * Optional, exactly like revenueDaily: only a source with dated transactions
+ * can produce it. Without it the 1W and 1M windows report every expense-derived
+ * figure as untracked rather than setting a whole month of costs against seven
+ * days of revenue.
+ */
+export interface ExpenseDayPoint {
+  /** "YYYY-MM-DD". */
+  date: string;
+  category: string;
+  amountCents: number;
+  platform?: PlatformId;
+  costOfRevenue?: boolean;
+}
+
+/**
+ * One month of the consumer rollup, so the audience can be plotted over time.
+ *
+ * The live rollup is a snapshot with no history — it says how many consumers
+ * exist now, not how many existed last March. This is that same shape,
+ * recorded per month.
+ */
+export interface ConsumerHistoryPoint {
+  /** "YYYY-MM". */
+  month: string;
+  platform: PlatformId;
+  tracked: number;
+  /** Same window keys as ConsumerStats.purchasers, as at that month. */
+  purchasers: Record<string, number>;
+}
+
+/**
+ * Total cash across all accounts, as at a month end.
+ *
+ * A single balance can't be plotted, and runway can't be plotted from one
+ * either. Recording the total on a schedule is what makes both a series.
+ */
+export interface CashHistoryPoint {
+  /** "YYYY-MM". */
+  month: string;
+  amountCents: number;
+}
+
+/**
  * Headcount at a point in time, for revenue per employee.
  *
  * A count, not a list of people: nothing here needs to identify anyone, and a
@@ -251,6 +296,9 @@ export interface ConnectorResult {
   gmvDaily?: GmvDayPoint[];
   cash?: CashPosition[];
   expenses?: ExpensePoint[];
+  expensesDaily?: ExpenseDayPoint[];
+  consumersMonthly?: ConsumerHistoryPoint[];
+  cashMonthly?: CashHistoryPoint[];
   headcount?: HeadcountPoint[];
   platforms?: Platform[];
   status: SourceStatus;
@@ -269,6 +317,9 @@ export interface Snapshot {
   gmvDaily: GmvDayPoint[];
   cash: CashPosition[];
   expenses: ExpensePoint[];
+  expensesDaily: ExpenseDayPoint[];
+  consumersMonthly: ConsumerHistoryPoint[];
+  cashMonthly: CashHistoryPoint[];
   headcount: HeadcountPoint[];
   sources: SourceStatus[];
 }

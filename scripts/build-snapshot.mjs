@@ -72,6 +72,15 @@ const snapshot = {
   expenses: (raw.expenses ?? []).filter(
     (e) => e && e.month && e.category && typeof e.amountCents === "number",
   ),
+  expensesDaily: (raw.expensesDaily ?? []).filter(
+    (e) => e && e.date && e.category && typeof e.amountCents === "number",
+  ),
+  consumersMonthly: (raw.consumersMonthly ?? []).filter(
+    (c) => c && c.month && typeof c.tracked === "number",
+  ),
+  cashMonthly: (raw.cashMonthly ?? []).filter(
+    (c) => c && c.month && typeof c.amountCents === "number",
+  ),
   headcount: (raw.headcount ?? []).filter(
     (h) => h && h.month && typeof h.employees === "number",
   ),

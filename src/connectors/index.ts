@@ -7,6 +7,9 @@ import { internalApiConnector } from "./internalApi";
 import type {
   CashPosition,
   ExpensePoint,
+  ExpenseDayPoint,
+  ConsumerHistoryPoint,
+  CashHistoryPoint,
   HeadcountPoint,
   GmvDayPoint,
   GmvPoint,
@@ -61,6 +64,9 @@ async function buildSnapshot(): Promise<Snapshot> {
   const gmvDaily = new Map<string, GmvDayPoint>();
   const expenses = new Map<string, ExpensePoint>();
   const headcount = new Map<string, HeadcountPoint>();
+  const expensesDaily = new Map<string, ExpenseDayPoint>();
+  const consumersMonthly = new Map<string, ConsumerHistoryPoint>();
+  const cashMonthly = new Map<string, CashHistoryPoint>();
   const platforms = new Map<string, Platform>(
     DEFAULT_PLATFORMS.map((p) => [p.id, p]),
   );
@@ -82,6 +88,11 @@ async function buildSnapshot(): Promise<Snapshot> {
       expenses.set(`${e.month}|${e.category}|${e.platform ?? ""}`, e);
     for (const h of r.headcount ?? [])
       headcount.set(`${h.month}|${h.platform ?? ""}`, h);
+    for (const e of r.expensesDaily ?? [])
+      expensesDaily.set(`${e.date}|${e.category}|${e.platform ?? ""}`, e);
+    for (const c of r.consumersMonthly ?? [])
+      consumersMonthly.set(`${c.month}|${c.platform}`, c);
+    for (const c of r.cashMonthly ?? []) cashMonthly.set(c.month, c);
   }
 
   // Any platform referenced by data but never declared still gets a name.
@@ -107,6 +118,9 @@ async function buildSnapshot(): Promise<Snapshot> {
     customers: [...customers.values()],
     consumers: [...consumers.values()],
     expenses: [...expenses.values()].sort((a, b) => a.month.localeCompare(b.month)),
+    expensesDaily: [...expensesDaily.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    consumersMonthly: [...consumersMonthly.values()].sort((a, b) => a.month.localeCompare(b.month)),
+    cashMonthly: [...cashMonthly.values()].sort((a, b) => a.month.localeCompare(b.month)),
     headcount: [...headcount.values()].sort((a, b) => a.month.localeCompare(b.month)),
     revenue: [...revenue.values()].sort((a, b) => a.month.localeCompare(b.month)),
     revenueDaily: [...revenueDaily.values()].sort((a, b) =>
