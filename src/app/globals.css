@@ -261,6 +261,15 @@ body {
   background: rgba(255, 255, 255, 0.06);
   transition: background 140ms ease, border-color 140ms ease;
 }
+/* Square, glyph-only variant of the ghost button. */
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+
 .ghost-btn:hover {
   background: rgba(255, 255, 255, 0.14);
   border-color: rgba(255, 255, 255, 0.34);
@@ -322,6 +331,85 @@ body {
 /* The signature card: navy gradient, mirroring the site's hero band. Chart
    colors inside are pinned to the dark-mode steps, which were validated
    against this exact ground — the surrounding page may still be light. */
+/* Dismiss control on the demo banner. Same 32px target as the date modal's. */
+.banner-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin-top: -2px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 130ms ease, color 130ms ease;
+}
+
+.banner-close:hover {
+  background: color-mix(in srgb, var(--status-warning) 22%, transparent);
+  color: var(--text-primary);
+}
+
+.banner-close:focus-visible {
+  outline: 2px solid var(--status-warning);
+  outline-offset: 1px;
+}
+
+/**
+ * The time-range strip, docked to the chart card beneath it.
+ *
+ * Same width and same left/right edges as the card, with a 6px gap and a
+ * flattened bottom edge so the two read as one control-plus-content unit while
+ * staying visually distinct — a single rounded box would have made the buttons
+ * look like part of the chart's own chrome.
+ */
+.chart-dock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  /* Rounded on top, nearly square where it meets the card. */
+  border-radius: 16px 16px 6px 6px;
+  box-shadow: var(--shadow-card);
+}
+
+/* The strip's own row fills the width: ranges left, buckets beside them,
+   Custom pushed to the far edge, so the bar looks deliberate rather than
+   left-huddled with dead space. */
+.chart-dock > * {
+  flex: 1;
+  justify-content: flex-start;
+}
+
+.chart-dock .relative {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* Squared top so it meets the strip cleanly. */
+.chart-dock + div > .hero-card {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+@media (max-width: 900px) {
+  .chart-dock {
+    padding: 7px 8px;
+  }
+  /* Below this width the strip scrolls sideways; a stretched child would
+     fight the scroller. */
+  .chart-dock > * {
+    flex: 0 0 auto;
+  }
+  .chart-dock .relative {
+    margin-left: 0;
+  }
+}
+
 .hero-card {
   background: linear-gradient(135deg, var(--navy) 0%, var(--navy-lift) 100%);
   border: 1px solid rgba(255, 255, 255, 0.1);

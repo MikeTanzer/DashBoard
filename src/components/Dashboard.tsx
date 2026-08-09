@@ -116,9 +116,6 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-[11px] muted hidden sm:inline">
-              Updated {utcStamp(snapshot.generatedAt)}
-            </span>
             <ThemeToggle />
           </div>
         </div>
@@ -127,8 +124,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
       <main className="shell py-7 sm:py-9">
         {snapshot.demo ? <DemoBanner /> : null}
 
-        {/* One control row, scoping everything below --------------------- */}
-        <div className="controls mb-6 flex flex-wrap items-center justify-between gap-3">
+        {/* Platform scope, above everything it filters ------------------- */}
+        <div className="controls mb-4 flex flex-wrap items-center justify-between gap-3">
           <FilterBar
             platforms={snapshot.platforms}
             selected={selected}
@@ -137,6 +134,12 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             to={range.to}
             bucket={bucket}
           />
+        </div>
+
+        {/* The time controls dock to the chart they drive: same width, same
+            alignment, a hairline gap so the pair reads as one unit without the
+            strip being mistaken for part of the card's content. ------------ */}
+        <div className="chart-dock">
           <RangePicker
             range={range.id}
             platform={selected}
@@ -468,7 +471,18 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Dismissable for the session only — deliberately not remembered.
+ *
+ * The banner's whole job is to stop a demo figure being mistaken for a real
+ * one. Persisting the dismissal would mean someone opens the dashboard weeks
+ * later, sees no warning, and reads seeded numbers as the business. Closing it
+ * clears the clutter now; a reload brings it back.
+ */
 function DemoBanner() {
+  const [open, setOpen] = useState(true);
+  if (!open) return null;
+
   return (
     <div
       className="mb-6 rounded-2xl px-5 py-4 flex items-start gap-3 max-[640px]:mb-3 max-[640px]:px-3 max-[640px]:py-2.5 max-[640px]:rounded-xl max-[640px]:gap-2"
@@ -488,7 +502,7 @@ function DemoBanner() {
           <circle cx="8" cy="11.4" r="1" fill="currentColor" />
         </svg>
       </span>
-      <div className="text-[13.5px] leading-relaxed max-[640px]:text-[12.5px] max-[640px]:leading-snug">
+      <div className="text-[13.5px] leading-relaxed max-[640px]:text-[12.5px] max-[640px]:leading-snug flex-1">
         <strong>Demo data.</strong>{" "}
         <span style={{ color: "var(--text-secondary)" }}>
           {/* Four lines of setup instructions push the revenue chart below the
@@ -503,6 +517,23 @@ function DemoBanner() {
           <span className="hidden max-[640px]:inline">Not real figures yet.</span>
         </span>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setOpen(false)}
+        aria-label="Dismiss the demo data notice"
+        title="Dismiss until reload"
+        className="banner-close"
+      >
+        <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">
+          <path
+            d="M1.5 1.5l9 9M10.5 1.5l-9 9"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
+        </svg>
+      </button>
     </div>
   );
 }
