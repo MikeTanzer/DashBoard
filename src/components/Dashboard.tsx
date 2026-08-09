@@ -292,7 +292,35 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           />
         </div>
 
-        {/* Row 3 — what it costs to run. Expenses arrive monthly, so these
+        {/* The map needs more room than a half column gives, and a nested
+            horizontal scrollbar reads as a bug. ---------------------------- */}
+        <div className="grid gap-4 mb-4">
+          {m.customersByState.available ? (
+            <StatesCard
+              data={m.customersByState.value}
+              customersWithoutState={m.customersWithoutState}
+              recency={
+                m.consumerRecency.available ? m.consumerRecency.value : undefined
+              }
+              recencyByState={m.consumerRecencyByState}
+              stateRecencyUnavailable={m.stateRecencyUnavailable}
+              tenure={m.customerTenure.available ? m.customerTenure.value : undefined}
+              tenureByState={m.customerTenureByState}
+              gmvWindowLabel={m.windowLabel}
+              gmvUnavailable={m.stateGmvUnavailable}
+              windowMonthCount={m.windowMonthCount}
+            />
+          ) : (
+            <EmptyCard
+              title="Customers by state"
+              needs={m.customersByState.needs}
+            />
+          )}
+        </div>
+
+        {/* The cost side, kept below the map so the page reads outward first
+            (what we've got, where it is) and then inward (what it costs to
+            run). Expenses arrive monthly, so these
             report themselves as untracked on a day-level window rather than
             setting a whole month's costs against seven days of revenue. --- */}
         <div className="grid grid-cols-2 gap-4 max-[640px]:gap-2.5 lg:grid-cols-4 mb-4">
@@ -377,32 +405,6 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
                 : undefined
             }
           />
-        </div>
-
-        {/* The map needs more room than a half column gives, and a nested
-            horizontal scrollbar reads as a bug. ---------------------------- */}
-        <div className="grid gap-4 mb-4">
-          {m.customersByState.available ? (
-            <StatesCard
-              data={m.customersByState.value}
-              customersWithoutState={m.customersWithoutState}
-              recency={
-                m.consumerRecency.available ? m.consumerRecency.value : undefined
-              }
-              recencyByState={m.consumerRecencyByState}
-              stateRecencyUnavailable={m.stateRecencyUnavailable}
-              tenure={m.customerTenure.available ? m.customerTenure.value : undefined}
-              tenureByState={m.customerTenureByState}
-              gmvWindowLabel={m.windowLabel}
-              gmvUnavailable={m.stateGmvUnavailable}
-              windowMonthCount={m.windowMonthCount}
-            />
-          ) : (
-            <EmptyCard
-              title="Customers by state"
-              needs={m.customersByState.needs}
-            />
-          )}
         </div>
 
         {/* Platform breakdown ---------------------------------------------- */}
