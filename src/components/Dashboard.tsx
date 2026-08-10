@@ -6,7 +6,6 @@ import { computeMetrics, platformBreakdown } from "@/lib/metrics";
 import type { TileKey } from "@/lib/metrics";
 import type { Primary } from "@/components/RevenueCard";
 import {
-  priorPhrase,
   readRange,
   resolveView,
   windowPhrase,
@@ -389,17 +388,29 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             report themselves as untracked on a day-level window rather than
             setting a whole month's costs against seven days of revenue. --- */}
         
+          {/* Revenue, pinned to twelve months like GMV beside it. Selecting it
+              points the card at its Revenue view rather than a tile series —
+              revenue already IS one of the card's subjects, so a parallel
+              tile-driven chart would be a second way to reach the same place.
+              It replaces the Expenses tile rather than joining it: thirteen
+              tiles would leave a row of one, and expenses stays reachable from
+              the Expenses subject and the whole breakdown section below. */}
           <StatTile
-            label={`Expenses · ${m.windowLabel}`}
-            {...tilePick("expenses")}
-            metric={m.expensesWindow}
+            label="Revenue · last 12 months"
+            selected={primary === "revenue" && !tile}
+            onSelect={() => {
+              setPrimary("revenue");
+              setTile(null);
+            }}
+            metric={m.revenueTrailing12}
             format={(v) => compactMoney(v)}
             hint={
-              m.sharedExcludedCents > 0
-                ? `Direct costs only · ${compactMoney(m.sharedExcludedCents)} shared overhead excluded`
+              m.revenueAllTime.available
+                ? `${compactMoney(m.revenueAllTime.value)} all time`
                 : undefined
             }
           />
+
 
           {/* Named for what it is: a positive figure is profit, a negative one
               is burn, and the label follows the sign rather than making the
@@ -441,19 +452,28 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             }
           />
 
-          {/* Gross margin now lives in the expenses section, where the costs
-              it is computed from are listed. */}
+          {/* Profit, pinned to twelve months and paired with the Revenue tile
+              above — selecting either points the card at that subject rather
+              than at a tile series. Replaces the revenue-change tile, whose
+              figure is still on the chart under the Revenue subject. */}
           <StatTile
-            label="Revenue change"
-            {...tilePick("change")}
-            metric={m.revenueChange}
-            format={(v) => `${v >= 0 ? "+" : ""}${percent(v, 1)}`}
+            label={
+              m.monthlyNetTrailing12.available &&
+              m.monthlyNetTrailing12.value < 0
+                ? "Loss · last 12 months"
+                : "Profit · last 12 months"
+            }
+            selected={primary === "profit" && !tile}
+            onSelect={() => {
+              setPrimary("profit");
+              setTile(null);
+            }}
+            metric={m.netTrailing12}
+            format={(v) => `${v < 0 ? "−" : ""}${compactMoney(Math.abs(v))}`}
             hint={
-              // All time compares year-over-year, so the caption has to say
-              // that rather than "the period before", which doesn't exist.
-              range.count === Infinity && !range.from
-                ? "Last 12 months vs the 12 before"
-                : `Complete periods only · vs ${priorPhrase(range)}`
+              m.monthlyNetTrailing12.available
+                ? `${compactMoney(Math.abs(m.monthlyNetTrailing12.value))}/mo average`
+                : undefined
             }
           />
         </div>

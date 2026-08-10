@@ -273,6 +273,9 @@ export interface DashboardMetrics {
   stateGmvUnavailable: string | null;
   /** GMV over the selected window — shopper spend, not our revenue. */
   gmvWindow: Metric<number>;
+  /** Collected revenue over the trailing twelve months, and over all time. */
+  revenueTrailing12: Metric<number>;
+  revenueAllTime: Metric<number>;
   /** GMV across every month on record, for the small print. */
   gmvAllTime: Metric<number>;
   /**
@@ -299,6 +302,8 @@ export interface DashboardMetrics {
   monthlyNet: Metric<number>;
   /** The same rate over the trailing twelve months, for a steadier comparison. */
   monthlyNetTrailing12: Metric<number>;
+  /** Net profit over the trailing twelve months, as a total. */
+  netTrailing12: Metric<number>;
   /** Months of cash left at the current burn. Unavailable when profitable. */
   runwayMonths: Metric<number>;
   /** (Revenue − cost of revenue) / revenue. Needs costOfRevenue flags. */
@@ -653,13 +658,20 @@ export function computeMetrics(
           // the twelve before them. Refusing outright was correct but
           // unhelpful — "is the business bigger than a year ago" is answerable
           // from the same data, and it's what the tile is being asked.
-          if (completeRows.length < 24) {
+          // Read off the MONTHLY series, not the plotted rows. Those rows are
+          // whatever bucket the chart is on, so on an annual view "24 rows"
+          // meant 24 years — the tile asked for two decades of history and
+          // reported "there are 2" while counting something else entirely.
+          const monthly = [...monthMap.values()]
+            .filter((r) => !r.partial)
+            .sort((x, y) => x.month.localeCompare(y.month));
+          if (monthly.length < 24) {
             return unavailable(
-              `Year-over-year needs 24 complete ${dayGrain ? "days" : "months"} of history. There ${completeRows.length === 1 ? "is" : "are"} ${completeRows.length}.`,
+              `Year-over-year needs 24 complete months of history. There ${monthly.length === 1 ? "is" : "are"} ${monthly.length}.`,
             );
           }
-          const recent = completeRows.slice(-12);
-          const prior = completeRows.slice(-24, -12);
+          const recent = monthly.slice(-12);
+          const prior = monthly.slice(-24, -12);
           const a = sumBy(recent, (r) => r.totalCents);
           const b = sumBy(prior, (r) => r.totalCents);
           return b > 0
@@ -1894,6 +1906,25 @@ export function computeMetrics(
   return {
     windowLabel,
     stateGmvUnavailable,
+    revenueTrailing12: (() => {
+      const months = [...new Set(snapshot.revenue.map((r) => r.month))]
+        .sort()
+        .slice(-12);
+      if (!months.length) return unavailable(NEEDS_REVENUE_HISTORY);
+      const keep = new Set(months);
+      return available(
+        snapshot.revenue
+          .filter((r) => inScope(r.platform) && keep.has(r.month))
+          .reduce((a, r) => a + r.saasCents + r.usageCents, 0),
+      );
+    })(),
+    revenueAllTime: snapshot.revenue.length
+      ? available(
+          snapshot.revenue
+            .filter((r) => inScope(r.platform))
+            .reduce((a, r) => a + r.saasCents + r.usageCents, 0),
+        )
+      : unavailable(NEEDS_REVENUE_HISTORY),
     gmvAllTime: snapshot.gmv.length
       ? available(
           snapshot.gmv
@@ -1929,6 +1960,21 @@ export function computeMetrics(
     windowMonthCount: windowMonths.size,
     expensesWindow,
     netProfitWindow,
+    netTrailing12: (() => {
+      if (!hasExpenses) return unavailable(NEEDS_EXPENSES);
+      const months = [...new Set(snapshot.revenue.map((r) => r.month))]
+        .sort()
+        .slice(-12);
+      if (!months.length) return unavailable(NEEDS_REVENUE_HISTORY);
+      const keep = new Set(months);
+      const rev = snapshot.revenue
+        .filter((r) => inScope(r.platform) && keep.has(r.month))
+        .reduce((a, r) => a + r.saasCents + r.usageCents, 0);
+      const exp = snapshot.expenses
+        .filter((e) => keep.has(e.month) && expenseInScope(e))
+        .reduce((a, e) => a + e.amountCents, 0);
+      return available(rev - exp);
+    })(),
     monthlyNetTrailing12: (() => {
       if (!hasExpenses) return unavailable(NEEDS_EXPENSES);
       const months = [...new Set(snapshot.revenue.map((r) => r.month))]
