@@ -653,7 +653,40 @@ const consumersMonthly = [];
       };
       purchasers.ever = Math.round(purchasers[365] * 1.28);
       if (purchasers.ever > tracked) purchasers.ever = tracked;
-      consumersMonthly.push({ month, platform: p.platform, tracked, purchasers });
+      // That month's geography. The generator holds the mix steady and scales
+      // it by the month's total — synthetic either way, but it means the
+      // dashboard reads a real per-month field rather than inferring one.
+      const weights = p.platform === "webjoint" ? WEBJOINT_STATES : MENU_STATES;
+      const counts = new Map();
+      for (const code of weights) counts.set(code, (counts.get(code) ?? 0) + 1);
+      const totalWeight = [...counts.values()].reduce((a, b) => a + b, 0);
+      const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+
+      const byState = {};
+      let left = tracked;
+      entries.forEach(([code, w], k) => {
+        const share =
+          k === entries.length - 1
+            ? left
+            : Math.round(tracked * (w / totalWeight));
+        byState[code] = share;
+        left -= share;
+      });
+
+      const stateSum = Object.values(byState).reduce((a, b) => a + b, 0);
+      if (stateSum !== tracked) {
+        throw new Error(
+          `consumersMonthly ${month}/${p.platform}: byState sums to ${stateSum}, expected ${tracked}`,
+        );
+      }
+
+      consumersMonthly.push({
+        month,
+        platform: p.platform,
+        tracked,
+        purchasers,
+        byState,
+      });
     }
   });
 }

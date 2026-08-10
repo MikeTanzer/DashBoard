@@ -234,6 +234,14 @@ export interface ConsumerHistoryPoint {
   tracked: number;
   /** Same window keys as ConsumerStats.purchasers, as at that month. */
   purchasers: Record<string, number>;
+  /**
+   * Optional: that month's tracked consumers per USPS state code.
+   *
+   * Without it the audience can be plotted over time but not broken down by
+   * where those people were — today's geographic mix says nothing about last
+   * March's, so applying it backwards would be an assumption dressed as data.
+   */
+  byState?: Record<string, number>;
 }
 
 /**

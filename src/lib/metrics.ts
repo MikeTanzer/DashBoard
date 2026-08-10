@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import { available, unavailable, consumerWindowLabel } from "./types";
 import { STATE_NAMES } from "./states";
+import { MAX_STATE_BANDS, REGION_OF, REGION_ORDER } from "./regions";
 import { dayLabel, monthLabel } from "./format";
 import type { Grain, RangeSpec } from "./range";
 
@@ -242,6 +243,8 @@ export interface DashboardMetrics {
   expenseSplit: Metric<ExpenseSplitPoint[]>;
   /** Customers per period, split by platform. */
   customerSplit: Metric<StackPoint[]>;
+  /** Consumers per period, split by state — or by region when there are many. */
+  consumerSplit: Metric<StackPoint[]>;
   /** Exclusive recency slices of the consumer base. */
   consumerRecency: Metric<RecencyBand[]>;
   /** The same slices scoped to one state, keyed by USPS code. */
@@ -1489,6 +1492,85 @@ export function computeMetrics(
         );
       })();
 
+  /**
+   * Consumers over time, split by where they are.
+   *
+   * By state while that stays readable, and rolled up to census regions past
+   * seven — a stack with twenty-two bands is a colour swatch, not a chart. The
+   * threshold is on distinct states present, not on the window, so the chart
+   * doesn't change shape as you move the date range.
+   *
+   * Requires a per-month state split from the source. Today's geographic mix
+   * says nothing about last March's, so applying it backwards would be an
+   * assumption dressed as data.
+   */
+  const consumerSplit: Metric<StackPoint[]> = (() => {
+    if (!snapshot.consumersMonthly.length) return unavailable(NEEDS_CONSUMERS);
+    const scoped = snapshot.consumersMonthly.filter((c) => inScope(c.platform));
+    if (!scoped.some((c) => c.byState)) {
+      return unavailable(
+        "Consumers aren't broken down by state per month. Add a `byState` map to each monthly consumer rollup — the current split can't be applied backwards, since it says nothing about where people were a year ago.",
+      );
+    }
+
+    const states = new Set<string>();
+    for (const c of scoped) {
+      for (const code of Object.keys(c.byState ?? {})) states.add(code);
+    }
+    const byRegion = states.size > MAX_STATE_BANDS;
+
+    /** Consumers for one plotted row, grouped into bands. */
+    const bandsFor = (r: MonthRevenue | DayRevenue) => {
+      const key = "date" in r ? r.date.slice(0, 7) : monthSpan(r.month).end;
+      const rows = scoped.filter((c) => c.month <= key);
+      if (!rows.length) return new Map<string, number>();
+      const last = rows[rows.length - 1].month;
+
+      const out = new Map<string, number>();
+      for (const c of rows.filter((x) => x.month === last)) {
+        for (const [code, v] of Object.entries(c.byState ?? {})) {
+          const band = byRegion ? (REGION_OF[code] ?? "Other") : code;
+          out.set(band, (out.get(band) ?? 0) + v);
+        }
+      }
+      return out;
+    };
+
+    // Band order is fixed across the whole series, so a band keeps its colour
+    // and its position in the stack from one column to the next.
+    const totals = new Map<string, number>();
+    for (const r of windowRows) {
+      for (const [band, v] of bandsFor(r)) {
+        totals.set(band, (totals.get(band) ?? 0) + v);
+      }
+    }
+    const order = byRegion
+      ? REGION_ORDER.filter((x) => totals.has(x)).concat(
+          [...totals.keys()].filter((x) => !REGION_ORDER.includes(x)),
+        )
+      : [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+
+    if (!order.length) return unavailable(NEEDS_CONSUMERS);
+
+    return available(
+      windowRows.map((r) => {
+        const b = toBar(r);
+        const bands = bandsFor(r);
+        return {
+          key: b.key,
+          label: b.label,
+          full: b.full,
+          partial: b.partial,
+          parts: order.map((id) => ({
+            id,
+            label: byRegion ? id : (STATE_NAMES[id] ?? id),
+            value: bands.get(id) ?? 0,
+          })),
+        };
+      }),
+    );
+  })();
+
   const gmvWindowTotal = (() => {
     // Match the keys the revenue window is already built from, so a quarter or
     // year rolls up identically instead of being re-derived.
@@ -1594,6 +1676,7 @@ export function computeMetrics(
     profitPair,
     expenseSplit,
     customerSplit,
+    consumerSplit,
     consumerRecency: recency,
     consumerRecencyByState,
     customerTenure,

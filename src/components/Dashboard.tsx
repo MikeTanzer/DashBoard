@@ -226,6 +226,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               showExpenseSplit={primary === "expenses" && !tile}
               customerSplit={m.customerSplit}
               showCustomerSplit={tile === "customers"}
+              consumerSplit={m.consumerSplit}
+              showConsumerSplit={tile === "consumers"}
               sharedExcludedCents={m.sharedExcludedCents}
             />
           ) : (
