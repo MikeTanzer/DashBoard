@@ -123,6 +123,10 @@ function Chip({
 }) {
   return (
     <button
+      // Explicit type: a button with no type defaults to "submit", which is
+      // only inert because there's no form around it today. One added later
+      // would turn every chip into a page reload.
+      type="button"
       onClick={onClick}
       aria-pressed={active}
       className="chip flex items-center gap-2"
