@@ -697,6 +697,33 @@ export function computeMetrics(
   const windowUsageSum = sumBy(windowRows, (r) => r.usageCents);
 
   /**
+   * Months the window spans, for turning a window total into a monthly rate.
+   *
+   * Day-grain windows convert at 30.44 days rather than being rounded to whole
+   * months — a 7-day window is a quarter of a month, and calling it one would
+   * quarter the figure it produces.
+   */
+  const windowMonthSpan = (() => {
+    const days = windowRows.filter((r) => "date" in r).length;
+    if (days > 0) return days / 30.44;
+    return windowMonths.size || 1;
+  })();
+
+  /**
+   * Average revenue per customer OVER THE WINDOW, not the current MRR rate.
+   *
+   * It used to read MRR ÷ customers, which is a point-in-time figure and so
+   * sat unchanged whichever range was selected — the one number on the page
+   * that ignored the control above it. Now it's what the window actually
+   * collected, per month, per customer, so this month and the last twelve
+   * genuinely differ.
+   */
+  const arpcBasis = (cents: number) =>
+    customers.length > 0
+      ? Math.round(cents / windowMonthSpan / customers.length)
+      : 0;
+
+  /**
    * Period-over-period, on COMPLETE buckets only.
    *
    * The plotted window deliberately includes the period in progress — you want
@@ -2191,14 +2218,16 @@ export function computeMetrics(
       : unavailable(NEEDS_CUSTOMERS),
 
     avgGrossPerCustomer: hasCustomers
-      ? available(Math.round(totalCents / customers.length))
+      ? available(arpcBasis(windowSum))
       : unavailable(NEEDS_CUSTOMERS),
 
+    // The two halves are taken off the same window total, so they still sum
+    // to the headline exactly.
     avgSaasShareCents: hasCustomers
-      ? available(Math.round(saasCents / customers.length))
+      ? available(arpcBasis(windowSum - windowUsageSum))
       : unavailable(NEEDS_CUSTOMERS),
     avgUsageShareCents: hasCustomers
-      ? available(Math.round(usageCents / customers.length))
+      ? available(arpcBasis(windowUsageSum))
       : unavailable(NEEDS_CUSTOMERS),
     usageBillingCustomers: payingUsage,
 
