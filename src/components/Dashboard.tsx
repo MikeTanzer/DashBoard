@@ -97,17 +97,27 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
    * The tile still drives the chart — the button shows the family, not the
    * series. Clicking that button then clears the tile and shows the subject's
    * own chart, so the pair reads as category and detail rather than two
-   * controls fighting over the same space. Tiles about the audience rather
-   * than the money (customers, states, consumers) map to nothing and leave the
-   * subject alone.
+   * controls fighting over the same space.
+   *
+   * Every tile maps to one now, including the audience ones — they sit under
+   * Revenue, since customers, states and shoppers are what the revenue is
+   * made of. Leaving them unmapped meant the toggle kept whatever was last
+   * chosen, which looked stale rather than deliberate.
    */
-  const TILE_SUBJECT: Partial<Record<TileKey, Primary>> = {
-    net: "expenses",
-    cash: "profit",
-    runway: "expenses",
-    revPerEmployee: "revenue",
+  const TILE_SUBJECT: Record<TileKey, Primary> = {
+    customers: "revenue",
+    states: "revenue",
+    consumers: "revenue",
+    purchasers: "revenue",
     arpc: "revenue",
     gmv: "revenue",
+    revPerEmployee: "revenue",
+    net: "expenses",
+    runway: "expenses",
+    cash: "profit",
+    change: "revenue",
+    expenses: "expenses",
+    margin: "margin",
   };
 
   const tilePick = (k: TileKey) =>
