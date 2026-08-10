@@ -56,6 +56,17 @@
   --seq-600: #1b4bb8;
   --seq-700: #0a2a5c;
 
+  /* A second sequential ramp, warm, for cost-of-revenue categories. The cool
+     ramp alone couldn't separate the two expense groups — every category was a
+     shade of the same blue, so which were COGS was invisible. */
+  --warm-100: #ffd9df;
+  --warm-200: #ffb3bf;
+  --warm-300: #ff8a9b;
+  --warm-400: #ff586e;
+  --warm-500: #e8384f;
+  --warm-600: #c02540;
+  --warm-700: #8f1830;
+
   --ink-on-seq-100: #0f172a;
   --ink-on-seq-200: #0f172a;
   --ink-on-seq-300: #0f172a;
@@ -106,6 +117,13 @@
     --seq-600: #86b3fb;
     --seq-700: #bcd6fd;
 
+    --warm-100: #5c1526;
+    --warm-200: #7d1c31;
+    --warm-300: #a52741;
+    --warm-400: #d13c58;
+    --warm-500: #ef6a80;
+    --warm-600: #ff9aa9;
+    --warm-700: #ffc6ce;
     --ink-on-seq-100: #ffffff;
     --ink-on-seq-200: #ffffff;
     --ink-on-seq-300: #ffffff;
@@ -152,6 +170,13 @@
   --seq-600: #86b3fb;
   --seq-700: #bcd6fd;
 
+  --warm-100: #5c1526;
+  --warm-200: #7d1c31;
+  --warm-300: #a52741;
+  --warm-400: #d13c58;
+  --warm-500: #ef6a80;
+  --warm-600: #ff9aa9;
+  --warm-700: #ffc6ce;
   --ink-on-seq-100: #ffffff;
   --ink-on-seq-200: #ffffff;
   --ink-on-seq-300: #ffffff;
@@ -1089,6 +1114,13 @@ a:focus-visible {
     grid-template-columns: 1fr 200px;
     align-items: center;
   }
+}
+
+.cat-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 
 /* Expense breakdown rows: label, bar, amount, share. Grid rather than flex so

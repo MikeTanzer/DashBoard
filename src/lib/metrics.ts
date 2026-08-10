@@ -97,6 +97,21 @@ export interface ExpenseSplitPoint {
   partial?: boolean;
 }
 
+/**
+ * One period split into an arbitrary number of named parts.
+ *
+ * Used where the split is over something open-ended — platforms, today two and
+ * later however many the network has — rather than a fixed pair like SaaS and
+ * usage. The parts carry their own labels so the legend builds itself.
+ */
+export interface StackPoint {
+  key: string;
+  label: string;
+  full: string;
+  parts: { id: string; label: string; value: number }[];
+  partial?: boolean;
+}
+
 /** Which stat tile a series belongs to. */
 export type TileKey =
   | "customers"
@@ -140,6 +155,12 @@ export interface RecencyBand {
   share: number;
   /** Sequential ramp step, or null for the neutral "never" slice. */
   step: number | null;
+  /**
+   * Which ramp the step indexes. Expense categories use it to separate cost of
+   * revenue from operating expense; everything else leaves it unset and gets
+   * the cool ramp.
+   */
+  tone?: "cool" | "warm";
 }
 
 /** "YYYY-MM" for right now, in UTC. */
@@ -219,6 +240,8 @@ export interface DashboardMetrics {
   profitPair: Metric<ProfitPoint[]>;
   /** Cost of revenue vs operating expense per period, for the expenses view. */
   expenseSplit: Metric<ExpenseSplitPoint[]>;
+  /** Customers per period, split by platform. */
+  customerSplit: Metric<StackPoint[]>;
   /** Exclusive recency slices of the consumer base. */
   consumerRecency: Metric<RecencyBand[]>;
   /** The same slices scoped to one state, keyed by USPS code. */
@@ -984,19 +1007,36 @@ export function computeMetrics(
           for (const e of scopedExpenses) {
             byCat.set(e.category, (byCat.get(e.category) ?? 0) + e.amountCents);
           }
+          // A category is cost of revenue when its lines are flagged that way.
+          const cogsCats = new Set(
+            scopedExpenses.filter((e) => e.costOfRevenue).map((e) => e.category),
+          );
+
           const rows = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
           if (!rows.length || expensesWindowCents <= 0) {
             return unavailable(NEEDS_EXPENSES);
           }
+
+          // Ranked WITHIN its group, so the darkest warm is the biggest COGS
+          // line and the darkest cool the biggest operating line — shade still
+          // means size, and hue now means which kind of cost it is.
           const RAMP = [600, 500, 400, 300, 200, 100];
+          let warmSeen = 0;
+          let coolSeen = 0;
+
           return available(
-            rows.map(([label, value], i) => ({
-              key: label,
-              label,
-              value,
-              share: value / expensesWindowCents,
-              step: RAMP[Math.min(i, RAMP.length - 1)],
-            })),
+            rows.map(([label, value]) => {
+              const warm = cogsCats.has(label);
+              const i = warm ? warmSeen++ : coolSeen++;
+              return {
+                key: label,
+                label,
+                value,
+                share: value / expensesWindowCents,
+                step: RAMP[Math.min(i, RAMP.length - 1)],
+                tone: warm ? ("warm" as const) : ("cool" as const),
+              };
+            }),
           );
         })();
 
@@ -1411,6 +1451,44 @@ export function computeMetrics(
           }),
         );
 
+  /**
+   * Customers over time, split by platform.
+   *
+   * Built from the platform list in the snapshot rather than a hard-coded pair,
+   * so a third platform appears in the chart and its legend without any change
+   * here. Platforms with no customers anywhere in the window are dropped, which
+   * keeps the legend honest when a filter is active.
+   */
+  const customerSplit: Metric<StackPoint[]> = customerHistoryNeeds
+    ? unavailable(customerHistoryNeeds)
+    : (() => {
+        const names = new Map(snapshot.platforms.map((p) => [p.id, p.name]));
+        const ids = [...new Set(customers.map((c) => c.platform))].sort(
+          (a, b) =>
+            customers.filter((c) => c.platform === b).length -
+            customers.filter((c) => c.platform === a).length,
+        );
+        if (!ids.length) return unavailable(NEEDS_CUSTOMERS);
+
+        return available(
+          windowRows.map((r) => {
+            const b = toBar(r);
+            const live = activeAsOf(bucketEndDate(r));
+            return {
+              key: b.key,
+              label: b.label,
+              full: b.full,
+              partial: b.partial,
+              parts: ids.map((id) => ({
+                id,
+                label: names.get(id) ?? id,
+                value: live.filter((c) => c.platform === id).length,
+              })),
+            };
+          }),
+        );
+      })();
+
   const gmvWindowTotal = (() => {
     // Match the keys the revenue window is already built from, so a quarter or
     // year rolls up identically instead of being re-derived.
@@ -1515,6 +1593,7 @@ export function computeMetrics(
     tileSeries,
     profitPair,
     expenseSplit,
+    customerSplit,
     consumerRecency: recency,
     consumerRecencyByState,
     customerTenure,

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import type {
   ExpenseSplitPoint,
+  StackPoint,
   ProfitPoint,
   SeriesPoint,
   TileSeries,
@@ -761,5 +762,244 @@ export function AxisPeriodLabel({
         </tspan>
       ) : null}
     </text>
+  );
+}
+
+/**
+ * Colours for an open-ended set of series, in assignment order.
+ *
+ * The first two are the validated pair used everywhere else, so a
+ * two-platform network looks like the rest of the dashboard. Beyond that the
+ * list steps through the two ramps at separated lightnesses. It cycles rather
+ * than running out; at that point a stacked chart is the wrong shape anyway
+ * and the table is the honest view.
+ */
+export const STACK_COLORS = [
+  "var(--series-1)",
+  "var(--series-2)",
+  "var(--seq-600)",
+  "var(--warm-600)",
+  "var(--seq-300)",
+  "var(--warm-300)",
+];
+
+export const stackColor = (i: number) =>
+  STACK_COLORS[i % STACK_COLORS.length];
+
+/**
+ * An N-part stacked column chart. Parts are given in stacking order, bottom
+ * first, and their labels drive the card's legend.
+ */
+export function StackedChart({ points }: { points: StackPoint[] }) {
+  const plotRef = useRef<HTMLDivElement>(null);
+  const measured = useElementWidth(plotRef, 1100);
+  const [hover, setHover] = useState<{
+    x: number;
+    y: number;
+    p: StackPoint;
+  } | null>(null);
+
+  const PLOT_H = 210;
+  const AXIS_H = 40;
+  const TOP_PAD = 20;
+  const LEFT = 64;
+  const RIGHT = 12;
+  const VB_W = Math.max(measured, 320);
+  const h = TOP_PAD + PLOT_H + AXIS_H;
+
+  const n = Math.max(1, points.length);
+  const plotW = VB_W - LEFT - RIGHT;
+  const slot = plotW / n;
+  const fill = n <= 3 ? 0.34 : n >= 12 ? 0.7 : 0.34 + ((n - 3) / 9) * 0.36;
+  const barW = Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85);
+  const barR = Math.min(4, barW / 3);
+
+  const totals = points.map((p) => p.parts.reduce((a, q) => a + q.value, 0));
+  const { ticks, lo, hi } = niceScale(0, Math.max(1, ...totals));
+  const yOf = (v: number) => PLOT_H - ((v - lo) / (hi - lo || 1)) * PLOT_H;
+
+  const show = (e: React.PointerEvent, p: StackPoint) => {
+    const rect = plotRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setHover({ x: e.clientX - rect.left, y: e.clientY - rect.top, p });
+  };
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div className="overflow-x-auto" ref={plotRef}>
+        <svg
+          viewBox={`0 0 ${VB_W} ${h}`}
+          width="100%"
+          className="chart-revenue"
+          role="img"
+          aria-label="Customers over time by platform"
+        >
+          <g transform={`translate(0 ${TOP_PAD})`}>
+            {ticks.map((t) => (
+              <g key={t}>
+                <line
+                  className="gridline"
+                  x1={LEFT}
+                  x2={VB_W - RIGHT}
+                  y1={yOf(t)}
+                  y2={yOf(t)}
+                />
+                <text
+                  className="axis-text"
+                  x={LEFT - 10}
+                  y={yOf(t) + 4}
+                  textAnchor="end"
+                >
+                  {compactNumber(t)}
+                </text>
+              </g>
+            ))}
+
+            <g key={`${points.length}-${points[0]?.key ?? ""}`}>
+              {points.map((p, i) => {
+                const cx = LEFT + i * slot + slot / 2;
+                const x = cx - barW / 2;
+                let running = 0;
+                const segs = p.parts.map((q, qi) => {
+                  const base = running;
+                  running += q.value;
+                  const top = yOf(running);
+                  const bottom = yOf(base);
+                  const isTop = qi === p.parts.length - 1;
+                  // 2px breather between bands, taken off the upper one.
+                  const height = Math.max(0, bottom - top - (qi > 0 ? 2 : 0));
+                  return { q, qi, top, height, isTop };
+                });
+
+                return (
+                  <g
+                    key={p.key}
+                    opacity={p.partial ? 0.5 : 1}
+                    onPointerMove={(e) => show(e, p)}
+                    onPointerDown={(e) => show(e, p)}
+                    onMouseLeave={() => setHover(null)}
+                  >
+                    <rect
+                      x={cx - slot / 2}
+                      y={0}
+                      width={slot}
+                      height={PLOT_H}
+                      fill="transparent"
+                    />
+                    <g
+                      className="bar-rise"
+                      style={{
+                        transformOrigin: `0px ${TOP_PAD + PLOT_H}px`,
+                        animationDelay: `${Math.min(i * 26, 400)}ms`,
+                      }}
+                    >
+                      {segs.map(({ q, qi, top, height, isTop }) =>
+                        height <= 0 ? null : isTop ? (
+                          <path
+                            key={q.id}
+                            d={roundedTopBar(x, top, barW, height, barR)}
+                            fill={stackColor(qi)}
+                          />
+                        ) : (
+                          <rect
+                            key={q.id}
+                            x={x}
+                            y={top}
+                            width={barW}
+                            height={height}
+                            fill={stackColor(qi)}
+                          />
+                        ),
+                      )}
+                    </g>
+                    <AxisPeriodLabel
+                      x={cx}
+                      y={PLOT_H + 17}
+                      label={p.label}
+                      partial={p.partial}
+                    />
+                  </g>
+                );
+              })}
+            </g>
+
+            <line
+              className="baseline"
+              x1={LEFT}
+              x2={VB_W - RIGHT}
+              y1={PLOT_H}
+              y2={PLOT_H}
+            />
+          </g>
+        </svg>
+      </div>
+
+      {hover ? (
+        <div
+          className="viz-tooltip"
+          style={{ left: hover.x, top: hover.y }}
+          role="status"
+        >
+          <div className="font-semibold mb-1">{hover.p.full}</div>
+          {[...hover.p.parts].reverse().map((q) => (
+            <div key={q.id} className="flex items-center gap-3">
+              <span className="tip-label">{q.label}</span>
+              <span className="tip-value">{fullNumber(q.value)}</span>
+            </div>
+          ))}
+          <div className="tip-dim mt-1">
+            {fullNumber(hover.p.parts.reduce((a, q) => a + q.value, 0))} total
+          </div>
+          {hover.p.partial ? (
+            <div className="tip-dim mt-1">Still in progress</div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Table view of the same stack. */
+export function StackedTable({ points }: { points: StackPoint[] }) {
+  const parts = points[0]?.parts ?? [];
+  return (
+    <div className="mt-3 max-h-[420px] overflow-y-auto">
+      <table className="dataview">
+        <thead>
+          <tr>
+            <th>Period</th>
+            {parts.map((q) => (
+              <th key={q.id} className="num">
+                {q.label}
+              </th>
+            ))}
+            <th className="num">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...points].reverse().map((p) => (
+            <tr key={p.key}>
+              <td>
+                {p.full}
+                {p.partial ? (
+                  <span style={{ color: "var(--text-muted)" }}>
+                    {" "}
+                    · in progress
+                  </span>
+                ) : null}
+              </td>
+              {p.parts.map((q) => (
+                <td key={q.id} className="num">
+                  {fullNumber(q.value)}
+                </td>
+              ))}
+              <td className="num">
+                {fullNumber(p.parts.reduce((a, q) => a + q.value, 0))}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

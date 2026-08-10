@@ -29,7 +29,7 @@ export function ExpensesCard({
   if (!m.expenseByCategory.available) {
     return (
       <section className="card p-6">
-        <h2 className="text-[15px] font-bold mb-3">Where the money goes</h2>
+        <h2 className="text-[15px] font-bold mb-3">Expense breakdown</h2>
         <NotTracked needs={m.expenseByCategory.needs} />
       </section>
     );
@@ -43,7 +43,7 @@ export function ExpensesCard({
     <section className="card p-6">
       <header className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div>
-          <h2 className="text-[15px] font-bold">Where the money goes</h2>
+          <h2 className="text-[15px] font-bold">Expense breakdown</h2>
           <p
             className="text-xs mt-0.5"
             style={{ color: "var(--text-secondary)" }}
@@ -56,7 +56,23 @@ export function ExpensesCard({
           </p>
         </div>
 
-        <div className="seg" role="tablist" aria-label="Expense view">
+        <div className="flex items-center gap-4">
+          {/* Which hue means what. Without this the two ramps are just colour. */}
+          <div
+            className="flex items-center gap-3 text-[11px] max-[640px]:hidden"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="cat-swatch" style={{ background: "var(--warm-400)" }} />
+              COGS
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="cat-swatch" style={{ background: "var(--seq-500)" }} />
+              Operations
+            </span>
+          </div>
+
+          <div className="seg" role="tablist" aria-label="Expense view">
           {(
             [
               ["bars", "Bars"],
@@ -72,6 +88,7 @@ export function ExpensesCard({
               {label}
             </button>
           ))}
+          </div>
         </div>
       </header>
 
@@ -93,7 +110,7 @@ export function ExpensesCard({
                   className="expense-fill"
                   style={{
                     width: `${(r.value / max) * 100}%`,
-                    background: `var(--seq-${r.step ?? 300})`,
+                    background: `var(--${r.tone === "warm" ? "warm" : "seq"}-${r.step ?? 300})`,
                   }}
                 />
               </span>
@@ -108,6 +125,7 @@ export function ExpensesCard({
             <thead>
               <tr>
                 <th>Category</th>
+                <th>Group</th>
                 <th className="num">Spend</th>
                 <th className="num">Share</th>
               </tr>
@@ -116,6 +134,9 @@ export function ExpensesCard({
               {rows.map((r) => (
                 <tr key={r.key}>
                   <td>{r.label}</td>
+                  <td style={{ color: "var(--text-secondary)" }}>
+                    {r.tone === "warm" ? "COGS" : "Operations"}
+                  </td>
                   <td className="num">{money(r.value)}</td>
                   <td className="num">{percent(r.share, 1)}</td>
                 </tr>
@@ -124,6 +145,7 @@ export function ExpensesCard({
             <tfoot>
               <tr>
                 <td>Total</td>
+                <td />
                 <td className="num">{money(total)}</td>
                 <td className="num">100%</td>
               </tr>

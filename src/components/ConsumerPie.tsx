@@ -71,7 +71,9 @@ export function ConsumerPie({
   });
 
   const fill = (b: RecencyBand) =>
-    b.step === null ? "var(--surface-sunken)" : `var(--seq-${b.step})`;
+    b.step === null
+      ? "var(--surface-sunken)"
+      : `var(--${b.tone === "warm" ? "warm" : "seq"}-${b.step})`;
 
   const move = (e: React.PointerEvent | React.MouseEvent, key: string) => {
     const rect = wrapRef.current?.getBoundingClientRect();

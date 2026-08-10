@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type {
   Bar,
   ExpenseSplitPoint,
+  StackPoint,
   ProfitPoint,
   TileSeries,
 } from "@/lib/metrics";
@@ -11,6 +12,9 @@ import type { Metric } from "@/lib/types";
 import {
   AxisPeriodLabel,
   ExpenseSplitChart,
+  StackedChart,
+  StackedTable,
+  stackColor,
   ExpenseSplitTable,
   ProfitPairChart,
   ProfitPairTable,
@@ -65,6 +69,10 @@ interface Props {
   expenseSplit?: Metric<ExpenseSplitPoint[]>;
   /** True when the expenses view owns the chart. */
   showExpenseSplit?: boolean;
+  /** Customers per period split by platform, for the customers tile. */
+  customerSplit?: Metric<StackPoint[]>;
+  /** True when the customers tile owns the chart. */
+  showCustomerSplit?: boolean;
   /** Shared overhead excluded by a platform filter, for the caveat line. */
   sharedExcludedCents?: number;
 }
@@ -96,6 +104,8 @@ export function RevenueCard({
   showProfitPair = false,
   expenseSplit,
   showExpenseSplit = false,
+  customerSplit,
+  showCustomerSplit = false,
   sharedExcludedCents = 0,
 }: Props) {
   const [view, setView] = useState<View>("chart");
@@ -297,7 +307,13 @@ export function RevenueCard({
         <div className="flex items-center gap-4">
           <Legend
             pairs={
-              showProfitPair
+              showCustomerSplit && customerSplit?.available
+                ? // Built from the data, so a third platform appears here
+                  // without a code change.
+                  (customerSplit.value[0]?.parts ?? []).map(
+                    (q, i) => [stackColor(i), q.label] as [string, string],
+                  )
+                : showProfitPair
                 ? [
                     ["var(--series-1)", "Gross"],
                     ["var(--series-2)", "Net"],
@@ -325,13 +341,15 @@ export function RevenueCard({
       >
         <div className="flex items-baseline justify-between gap-3 mb-1">
           <h2 className="text-[13px] font-bold">
-            {showProfitPair
-              ? `Gross and net profit by ${unit}`
-              : showExpenseSplit
-                ? `Cost of revenue and operations by ${unit}`
-                : series
-                  ? series.title
-                  : `Collected revenue by ${unit}`}
+            {showCustomerSplit
+              ? `Customers by ${unit}, split by platform`
+              : showProfitPair
+                ? `Gross and net profit by ${unit}`
+                : showExpenseSplit
+                  ? `Cost of revenue and operations by ${unit}`
+                  : series
+                    ? series.title
+                    : `Collected revenue by ${unit}`}
           </h2>
           {!unavailableReason ? (
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -341,7 +359,13 @@ export function RevenueCard({
           ) : null}
         </div>
 
-        {showExpenseSplit && expenseSplit?.available ? (
+        {showCustomerSplit && customerSplit?.available ? (
+          view === "chart" ? (
+            <StackedChart points={customerSplit.value} />
+          ) : (
+            <StackedTable points={customerSplit.value} />
+          )
+        ) : showExpenseSplit && expenseSplit?.available ? (
           view === "chart" ? (
             <ExpenseSplitChart points={expenseSplit.value} />
           ) : (
