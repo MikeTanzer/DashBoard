@@ -1,9 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Bar, ProfitPoint, TileSeries } from "@/lib/metrics";
+import type {
+  Bar,
+  ExpenseSplitPoint,
+  ProfitPoint,
+  TileSeries,
+} from "@/lib/metrics";
 import type { Metric } from "@/lib/types";
 import {
+  AxisPeriodLabel,
+  ExpenseSplitChart,
+  ExpenseSplitTable,
   ProfitPairChart,
   ProfitPairTable,
   SeriesChart,
@@ -53,6 +61,10 @@ interface Props {
    * a tile's series arrives through the same `series` prop.
    */
   showProfitPair?: boolean;
+  /** Cost of revenue vs operations per period, for the expenses view. */
+  expenseSplit?: Metric<ExpenseSplitPoint[]>;
+  /** True when the expenses view owns the chart. */
+  showExpenseSplit?: boolean;
   /** Shared overhead excluded by a platform filter, for the caveat line. */
   sharedExcludedCents?: number;
 }
@@ -82,6 +94,8 @@ export function RevenueCard({
   grossMargin,
   profitPair,
   showProfitPair = false,
+  expenseSplit,
+  showExpenseSplit = false,
   sharedExcludedCents = 0,
 }: Props) {
   const [view, setView] = useState<View>("chart");
@@ -104,7 +118,9 @@ export function RevenueCard({
   // of its band — so a 3-month view draws broad columns and a 12-month or daily
   // view draws slim ones.
   const PLOT_H = 210;
-  const AXIS_H = 26;
+  // 40, not 26: period labels put the year on a second line, and the old
+  // height clipped it against the viewBox edge.
+  const AXIS_H = 40;
   // Headroom: the top gridline label is centred on y=0 and the direct value
   // label sits 8px above its column — both clip on the viewBox edge without it.
   const TOP_PAD = 20;
@@ -286,10 +302,15 @@ export function RevenueCard({
                     ["var(--series-1)", "Gross"],
                     ["var(--series-2)", "Net"],
                   ]
-                : [
-                    ["var(--series-1)", "SaaS"],
-                    ["var(--series-2)", "Usage"],
-                  ]
+                : showExpenseSplit
+                  ? [
+                      ["var(--series-1)", "Operations"],
+                      ["var(--series-2)", "COGS"],
+                    ]
+                  : [
+                      ["var(--series-1)", "SaaS"],
+                      ["var(--series-2)", "Usage"],
+                    ]
             }
           />
           <ViewToggle view={view} onChange={setView} />
@@ -304,9 +325,11 @@ export function RevenueCard({
           <h2 className="text-[13px] font-bold">
             {showProfitPair
               ? `Gross and net profit by ${unit}`
-              : series
-                ? series.title
-                : `Collected revenue by ${unit}`}
+              : showExpenseSplit
+                ? `Cost of revenue and operations by ${unit}`
+                : series
+                  ? series.title
+                  : `Collected revenue by ${unit}`}
           </h2>
           {!unavailableReason ? (
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -316,7 +339,13 @@ export function RevenueCard({
           ) : null}
         </div>
 
-        {showProfitPair && profitPair?.available ? (
+        {showExpenseSplit && expenseSplit?.available ? (
+          view === "chart" ? (
+            <ExpenseSplitChart points={expenseSplit.value} />
+          ) : (
+            <ExpenseSplitTable points={expenseSplit.value} />
+          )
+        ) : showProfitPair && profitPair?.available ? (
           view === "chart" ? (
             <ProfitPairChart points={profitPair.value} />
           ) : (
@@ -433,15 +462,12 @@ export function RevenueCard({
                           {compactMoney(b.totalCents)}
                         </text>
                       ) : null}
-                      <text
-                        className="axis-text"
-                        x={cx}
-                        y={PLOT_H + 17}
-                        textAnchor="middle"
-                      >
-                        {b.label}
-                        {b.partial ? "*" : ""}
-                      </text>
+                      <AxisPeriodLabel
+                      x={cx}
+                      y={PLOT_H + 17}
+                      label={b.label}
+                      partial={b.partial}
+                    />
                     </g>
                   );
                 })}

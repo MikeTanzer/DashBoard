@@ -1,8 +1,19 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { ProfitPoint, SeriesPoint, TileSeries } from "@/lib/metrics";
-import { compactMoney, compactNumber, fullNumber, money } from "@/lib/format";
+import type {
+  ExpenseSplitPoint,
+  ProfitPoint,
+  SeriesPoint,
+  TileSeries,
+} from "@/lib/metrics";
+import {
+  compactMoney,
+  compactNumber,
+  fullNumber,
+  money,
+  periodLabelLines,
+} from "@/lib/format";
 import { useElementWidth } from "@/lib/useElementWidth";
 
 /**
@@ -29,7 +40,9 @@ export function SeriesChart({
   } | null>(null);
 
   const PLOT_H = 210;
-  const AXIS_H = 26;
+  // 40, not 26: period labels put the year on a second line, and the old
+  // height clipped it against the viewBox edge.
+  const AXIS_H = 40;
   const TOP_PAD = 20;
   const LEFT = 64;
   const RIGHT = 12;
@@ -158,15 +171,12 @@ export function SeriesChart({
                       className="texture-a"
                     />
                   </g>
-                  <text
-                    className="axis-text"
-                    x={cx}
-                    y={PLOT_H + 17}
-                    textAnchor="middle"
-                  >
-                    {p.label}
-                    {p.partial ? "*" : ""}
-                  </text>
+                  <AxisPeriodLabel
+                      x={cx}
+                      y={PLOT_H + 17}
+                      label={p.label}
+                      partial={p.partial}
+                    />
                 </g>
               );
             })}
@@ -294,7 +304,9 @@ export function ProfitPairChart({ points }: { points: ProfitPoint[] }) {
   } | null>(null);
 
   const PLOT_H = 210;
-  const AXIS_H = 26;
+  // 40, not 26: period labels put the year on a second line, and the old
+  // height clipped it against the viewBox edge.
+  const AXIS_H = 40;
   const TOP_PAD = 20;
   const LEFT = 64;
   const RIGHT = 12;
@@ -304,10 +316,17 @@ export function ProfitPairChart({ points }: { points: ProfitPoint[] }) {
   const n = Math.max(1, points.length);
   const plotW = VB_W - LEFT - RIGHT;
   const slot = plotW / n;
-  // Two bars share the band, so each takes half the fill a single bar would.
+  // One column per period, not two side by side. Gross and net share an x and
+  // are told apart by width: gross full, net narrower and drawn on top.
+  //
+  // This works in both cases the data actually produces. Gross positive with
+  // net negative — the interesting one — puts them either side of zero, so
+  // they never touch. Both positive, and net is necessarily the shorter of the
+  // two (net = gross minus operating expense, which can't be negative), so the
+  // narrower bar sits inside the taller one and the overhang IS the opex.
   const fill = n <= 3 ? 0.34 : n >= 12 ? 0.7 : 0.34 + ((n - 3) / 9) * 0.36;
-  const pairW = Math.min(Math.max(6, Math.min(slot * fill, 120)), slot * 0.85);
-  const barW = Math.max(3, (pairW - 3) / 2);
+  const barW = Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85);
+  const innerW = Math.max(3, barW * 0.52);
 
   const values = points.flatMap((p) => [p.grossCents, p.netCents]);
   const { ticks, lo, hi } = niceScale(
@@ -323,16 +342,22 @@ export function ProfitPairChart({ points }: { points: ProfitPoint[] }) {
     setHover({ x: e.clientX - rect.left, y: e.clientY - rect.top, p });
   };
 
-  const bar = (v: number, x: number, color: string, key: string) => {
+  const bar = (
+    v: number,
+    x: number,
+    w: number,
+    color: string,
+    key: string,
+  ) => {
     const vy = yOf(v);
     return (
       <rect
         key={key}
         x={x}
         y={Math.min(vy, zeroY)}
-        width={barW}
+        width={w}
         height={Math.max(1, Math.abs(vy - zeroY))}
-        rx={Math.min(3, barW / 3)}
+        rx={Math.min(3, w / 3)}
         fill={color}
       />
     );
@@ -372,7 +397,6 @@ export function ProfitPairChart({ points }: { points: ProfitPoint[] }) {
             <g key={`${points.length}-${points[0]?.key ?? ""}`}>
               {points.map((p, i) => {
                 const cx = LEFT + i * slot + slot / 2;
-                const left = cx - pairW / 2;
                 return (
                   <g
                     key={p.key}
@@ -395,25 +419,23 @@ export function ProfitPairChart({ points }: { points: ProfitPoint[] }) {
                         animationDelay: `${Math.min(i * 26, 400)}ms`,
                       }}
                     >
-                      {bar(p.grossCents, left, "var(--series-1)", "g")}
+                      {bar(p.grossCents, cx - barW / 2, barW, "var(--series-1)", "g")}
                       {bar(
                         p.netCents,
-                        left + barW + 3,
+                        cx - innerW / 2,
+                        innerW,
                         p.netCents < 0
                           ? "var(--status-critical)"
                           : "var(--series-2)",
                         "n",
                       )}
                     </g>
-                    <text
-                      className="axis-text"
+                    <AxisPeriodLabel
                       x={cx}
                       y={PLOT_H + 17}
-                      textAnchor="middle"
-                    >
-                      {p.label}
-                      {p.partial ? "*" : ""}
-                    </text>
+                      label={p.label}
+                      partial={p.partial}
+                    />
                   </g>
                 );
               })}
@@ -482,5 +504,262 @@ export function ProfitPairTable({ points }: { points: ProfitPoint[] }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * Cost of revenue and operating expense, stacked to the period's total.
+ *
+ * Stacked here where gross/net is grouped, and the difference is real: these
+ * two ADD to what was spent, so the column height is a figure that means
+ * something. Gross and net don't add to anything.
+ */
+export function ExpenseSplitChart({ points }: { points: ExpenseSplitPoint[] }) {
+  const plotRef = useRef<HTMLDivElement>(null);
+  const measured = useElementWidth(plotRef, 1100);
+  const [hover, setHover] = useState<{
+    x: number;
+    y: number;
+    p: ExpenseSplitPoint;
+  } | null>(null);
+
+  const PLOT_H = 210;
+  // 40, not 26: period labels put the year on a second line, and the old
+  // height clipped it against the viewBox edge.
+  const AXIS_H = 40;
+  const TOP_PAD = 20;
+  const LEFT = 64;
+  const RIGHT = 12;
+  const VB_W = Math.max(measured, 320);
+  const h = TOP_PAD + PLOT_H + AXIS_H;
+
+  const n = Math.max(1, points.length);
+  const plotW = VB_W - LEFT - RIGHT;
+  const slot = plotW / n;
+  const fill = n <= 3 ? 0.34 : n >= 12 ? 0.7 : 0.34 + ((n - 3) / 9) * 0.36;
+  const barW = Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85);
+  const barR = Math.min(4, barW / 3);
+
+  const totals = points.map((p) => p.cogsCents + p.opexCents);
+  const { ticks, lo, hi } = niceScale(0, Math.max(0, ...totals));
+  const yOf = (v: number) => PLOT_H - ((v - lo) / (hi - lo || 1)) * PLOT_H;
+
+  const show = (e: React.PointerEvent, p: ExpenseSplitPoint) => {
+    const rect = plotRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setHover({ x: e.clientX - rect.left, y: e.clientY - rect.top, p });
+  };
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div className="overflow-x-auto" ref={plotRef}>
+        <svg
+          viewBox={`0 0 ${VB_W} ${h}`}
+          width="100%"
+          className="chart-revenue"
+          role="img"
+          aria-label="Cost of revenue and operating expense over time"
+        >
+          <g transform={`translate(0 ${TOP_PAD})`}>
+            {ticks.map((t) => (
+              <g key={t}>
+                <line
+                  className="gridline"
+                  x1={LEFT}
+                  x2={VB_W - RIGHT}
+                  y1={yOf(t)}
+                  y2={yOf(t)}
+                />
+                <text
+                  className="axis-text"
+                  x={LEFT - 10}
+                  y={yOf(t) + 4}
+                  textAnchor="end"
+                >
+                  {compactMoney(t)}
+                </text>
+              </g>
+            ))}
+
+            <g key={`${points.length}-${points[0]?.key ?? ""}`}>
+              {points.map((p, i) => {
+                const cx = LEFT + i * slot + slot / 2;
+                const x = cx - barW / 2;
+                const total = p.cogsCents + p.opexCents;
+                const cogsTop = yOf(p.cogsCents);
+                const cogsH = PLOT_H - cogsTop;
+                const opexTop = yOf(total);
+                // 2px breather between the bands, taken off the upper one.
+                const opexH = Math.max(0, cogsTop - 2 - opexTop);
+                return (
+                  <g
+                    key={p.key}
+                    opacity={p.partial ? 0.5 : 1}
+                    onPointerMove={(e) => show(e, p)}
+                    onPointerDown={(e) => show(e, p)}
+                    onMouseLeave={() => setHover(null)}
+                  >
+                    <rect
+                      x={cx - slot / 2}
+                      y={0}
+                      width={slot}
+                      height={PLOT_H}
+                      fill="transparent"
+                    />
+                    <g
+                      className="bar-rise"
+                      style={{
+                        transformOrigin: `0px ${TOP_PAD + PLOT_H}px`,
+                        animationDelay: `${Math.min(i * 26, 400)}ms`,
+                      }}
+                    >
+                      {cogsH > 0 ? (
+                        <rect
+                          x={x}
+                          y={cogsTop}
+                          width={barW}
+                          height={cogsH}
+                          fill="var(--series-2)"
+                          className="texture-b"
+                        />
+                      ) : null}
+                      {opexH > 0 ? (
+                        <path
+                          d={roundedTopBar(x, opexTop, barW, opexH, barR)}
+                          fill="var(--series-1)"
+                          className="texture-a"
+                        />
+                      ) : null}
+                    </g>
+                    <AxisPeriodLabel
+                      x={cx}
+                      y={PLOT_H + 17}
+                      label={p.label}
+                      partial={p.partial}
+                    />
+                  </g>
+                );
+              })}
+            </g>
+
+            <line
+              className="baseline"
+              x1={LEFT}
+              x2={VB_W - RIGHT}
+              y1={PLOT_H}
+              y2={PLOT_H}
+            />
+          </g>
+        </svg>
+      </div>
+
+      {hover ? (
+        <div
+          className="viz-tooltip"
+          style={{ left: hover.x, top: hover.y }}
+          role="status"
+        >
+          <div className="font-semibold mb-1">{hover.p.full}</div>
+          <div className="flex items-center gap-3">
+            <span className="tip-label">Operations</span>
+            <span className="tip-value">{money(hover.p.opexCents)}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="tip-label">COGS</span>
+            <span className="tip-value">{money(hover.p.cogsCents)}</span>
+          </div>
+          <div className="tip-dim mt-1">
+            {money(hover.p.cogsCents + hover.p.opexCents)} total
+          </div>
+          {hover.p.partial ? (
+            <div className="tip-dim mt-1">Still in progress</div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Table view of the same split. */
+export function ExpenseSplitTable({ points }: { points: ExpenseSplitPoint[] }) {
+  return (
+    <div className="mt-3 max-h-[420px] overflow-y-auto">
+      <table className="dataview">
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th className="num">COGS</th>
+            <th className="num">Operations</th>
+            <th className="num">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...points].reverse().map((p) => (
+            <tr key={p.key}>
+              <td>
+                {p.full}
+                {p.partial ? (
+                  <span style={{ color: "var(--text-muted)" }}>
+                    {" "}
+                    · in progress
+                  </span>
+                ) : null}
+              </td>
+              <td className="num">{money(p.cogsCents)}</td>
+              <td className="num">{money(p.opexCents)}</td>
+              <td className="num">{money(p.cogsCents + p.opexCents)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Bar with a rounded data-end and a square baseline end. */
+function roundedTopBar(
+  x: number,
+  y: number,
+  w: number,
+  hgt: number,
+  r: number,
+): string {
+  const rr = Math.min(r, w / 2, hgt);
+  return `M${x} ${y + hgt} L${x} ${y + rr} Q${x} ${y} ${x + rr} ${y} L${x + w - rr} ${y} Q${x + w} ${y} ${x + w} ${y + rr} L${x + w} ${y + hgt} Z`;
+}
+
+
+/**
+ * An x-axis period label, with the year dropped onto a second line.
+ *
+ * Shared by every chart on the page so they can't drift apart — the axis is
+ * one of the few things a reader compares directly across charts.
+ */
+export function AxisPeriodLabel({
+  x,
+  y,
+  label,
+  partial,
+}: {
+  x: number;
+  y: number;
+  label: string;
+  partial?: boolean;
+}) {
+  const [main, year] = periodLabelLines(label);
+  const star = partial ? "*" : "";
+  return (
+    <text className="axis-text" x={x} y={y} textAnchor="middle">
+      <tspan x={x}>
+        {main}
+        {year ? "" : star}
+      </tspan>
+      {year ? (
+        <tspan x={x} dy="12">
+          {year}
+          {star}
+        </tspan>
+      ) : null}
+    </text>
   );
 }

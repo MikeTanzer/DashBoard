@@ -81,6 +81,22 @@ export interface ProfitPoint {
   partial?: boolean;
 }
 
+/**
+ * One period of spend, split into the two groups that behave differently.
+ *
+ * Cost of revenue scales with what you sell; operating expense is what it
+ * costs to exist. They ADD to the period's total, so unlike gross/net these
+ * stack legitimately.
+ */
+export interface ExpenseSplitPoint {
+  key: string;
+  label: string;
+  full: string;
+  cogsCents: number;
+  opexCents: number;
+  partial?: boolean;
+}
+
 /** Which stat tile a series belongs to. */
 export type TileKey =
   | "customers"
@@ -201,6 +217,8 @@ export interface DashboardMetrics {
   tileSeries: Record<TileKey, TileSeries>;
   /** Gross and net profit per plotted period, for the profit view. */
   profitPair: Metric<ProfitPoint[]>;
+  /** Cost of revenue vs operating expense per period, for the expenses view. */
+  expenseSplit: Metric<ExpenseSplitPoint[]>;
   /** Exclusive recency slices of the consumer base. */
   consumerRecency: Metric<RecencyBand[]>;
   /** The same slices scoped to one state, keyed by USPS code. */
@@ -1371,6 +1389,28 @@ export function computeMetrics(
           }),
         );
 
+  const expenseSplit: Metric<ExpenseSplitPoint[]> = !hasExpenses
+    ? unavailable(NEEDS_EXPENSES)
+    : expensesNeedMonths
+      ? unavailable(expensesNeedMonths)
+      : available(
+          windowRows.map((r) => {
+            const b = toBar(r);
+            const cogs = expenseTotalForRow(r, true);
+            return {
+              key: b.key,
+              label: b.label,
+              full: b.full,
+              cogsCents: cogs,
+              // Everything that isn't cost of revenue. Derived as a remainder
+              // rather than summed separately so the two always add to the
+              // period's total exactly.
+              opexCents: expenseTotalForRow(r) - cogs,
+              partial: b.partial,
+            };
+          }),
+        );
+
   const gmvWindowTotal = (() => {
     // Match the keys the revenue window is already built from, so a quarter or
     // year rolls up identically instead of being re-derived.
@@ -1474,6 +1514,7 @@ export function computeMetrics(
     employees: latestHeadcount,
     tileSeries,
     profitPair,
+    expenseSplit,
     consumerRecency: recency,
     consumerRecencyByState,
     customerTenure,

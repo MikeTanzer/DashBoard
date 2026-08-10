@@ -122,3 +122,21 @@ export function axisTicks(max: number, count = 4): number[] {
   }
   return ticks;
 }
+
+
+/**
+ * Splits a period label into its main part and a year, when it carries one.
+ *
+ * "Mar '24" becomes ["Mar", "'24"] so a chart can set the year on a second
+ * line: the label then occupies roughly half the width, which is the
+ * difference between thirty monthly columns fitting and their labels
+ * overlapping into an unreadable band.
+ *
+ * Matched on a trailing apostrophe-year specifically, so day labels like
+ * "3 Aug" and plain years like "2024" are left alone — splitting those would
+ * put the wrong half on top.
+ */
+export function periodLabelLines(label: string): [string, string | null] {
+  const m = label.match(/^(.*)\s(['\u2019]\d{2})$/);
+  return m ? [m[1], m[2]] : [label, null];
+}

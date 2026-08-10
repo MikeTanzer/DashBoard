@@ -222,6 +222,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               grossMargin={m.grossMargin}
               profitPair={m.profitPair}
               showProfitPair={primary === "profit" && !tile}
+              expenseSplit={m.expenseSplit}
+              showExpenseSplit={primary === "expenses" && !tile}
               sharedExcludedCents={m.sharedExcludedCents}
             />
           ) : (
