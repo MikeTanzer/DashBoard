@@ -90,9 +90,36 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
    * effect is to display an error is worse than no control. The tile still
    * shows its current value; it just doesn't pretend to be a chart source.
    */
+  /**
+   * Which subject each metric belongs to, so selecting a tile also lights up
+   * the subject button it sits under.
+   *
+   * The tile still drives the chart — the button shows the family, not the
+   * series. Clicking that button then clears the tile and shows the subject's
+   * own chart, so the pair reads as category and detail rather than two
+   * controls fighting over the same space. Tiles about the audience rather
+   * than the money (customers, states, consumers) map to nothing and leave the
+   * subject alone.
+   */
+  const TILE_SUBJECT: Partial<Record<TileKey, Primary>> = {
+    net: "expenses",
+    cash: "profit",
+    runway: "expenses",
+    revPerEmployee: "revenue",
+    arpc: "revenue",
+    gmv: "revenue",
+  };
+
   const tilePick = (k: TileKey) =>
     m.tileSeries[k].points.available
-      ? { selected: tile === k, onSelect: () => pickTile(k) }
+      ? {
+          selected: tile === k,
+          onSelect: () => {
+            pickTile(k);
+            const subject = TILE_SUBJECT[k];
+            if (subject) setPrimary(subject);
+          },
+        }
       : {};
 
   // Falls back to the revenue chart if the default selection turns out to be
@@ -190,7 +217,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               <button
                 key={id}
                 role="tab"
-                aria-selected={primary === id && !tile}
+                aria-selected={primary === id}
                 onClick={() => {
                   setPrimary(id);
                   // A selected stat tile would keep overriding the chart and
