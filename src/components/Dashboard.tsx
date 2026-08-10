@@ -331,18 +331,22 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           {/* The RATE, not a window total: "$1.9M burned all time" says
               nothing you can act on and swings with the range, while a monthly
               figure compares across ranges and is what runway divides into. */}
+          {/* What goes OUT over the window — so the row subtracts:
+              revenue − burn = profit/loss, all three on the same window.
+              This used to show NET burn (revenue minus expenses), which is
+              the same quantity as profit/loss in different units, so two of
+              the three tiles were saying the same thing and the arithmetic
+              across the row didn't hold. The monthly rate keeps its place in
+              the small print. */}
           <StatTile
-            label={
-              m.monthlyNet.available && m.monthlyNet.value < 0
-                ? "Burn rate"
-                : "Profit rate"
-            }
+            label="Burn"
+            note={m.windowLabel}
             {...tilePick("net")}
-            metric={m.monthlyNet}
-            format={(v) => `${v < 0 ? "−" : ""}${compactMoney(Math.abs(v))}/mo`}
+            metric={m.expensesWindow}
+            format={(v) => compactMoney(v)}
             hint={
-              m.monthlyNetTrailing12.available
-                ? `${compactMoney(Math.abs(m.monthlyNetTrailing12.value))}/mo over the last 12 months${
+              m.monthlyExpenses.available
+                ? `${compactMoney(m.monthlyExpenses.value)}/mo burn rate${
                     m.sharedExcludedCents > 0 ? " · direct costs only" : ""
                   }`
                 : undefined

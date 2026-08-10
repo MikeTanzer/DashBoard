@@ -313,6 +313,8 @@ export interface DashboardMetrics {
   monthlyNet: Metric<number>;
   /** The same rate over the trailing twelve months, for a steadier comparison. */
   monthlyNetTrailing12: Metric<number>;
+  /** Spend per month over the window — what goes OUT, before revenue. */
+  monthlyExpenses: Metric<number>;
   /** Net profit over the trailing twelve months, as a total. */
   netTrailing12: Metric<number>;
   /** Months of cash left at the current burn. Unavailable when profitable. */
@@ -2048,6 +2050,18 @@ export function computeMetrics(
         .reduce((a, e) => a + e.amountCents, 0);
       return available(Math.round((rev - exp) / months.length));
     })(),
+    monthlyExpenses:
+      !hasExpenses || expensesNeedMonths
+        ? (expensesWindow as Metric<number>)
+        : available(
+            Math.round(
+              dayGrainWindow
+                ? (expensesWindowCents / windowDays.size) * 30.44
+                : windowMonths.size > 0
+                  ? expensesWindowCents / windowMonths.size
+                  : 0,
+            ),
+          ),
     monthlyNet:
       !hasExpenses || expensesNeedMonths
         ? (expensesWindow as Metric<number>)
