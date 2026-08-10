@@ -59,7 +59,8 @@ export function RevenuePerCustomer({
   return (
     <div {...pickProps}>
       <div className="eyebrow">Avg revenue per customer</div>
-      <div className="display text-[30px]">{money(gross)}/mo</div>
+      <div className="display text-[30px]">{money(gross)}</div>
+      <div className="tile-unit">per month</div>
 
       {saas !== null && usage !== null && gross > 0 ? (
         <>
@@ -131,7 +132,7 @@ function SplitRow({
         className="font-semibold whitespace-nowrap"
         style={{ fontVariantNumeric: "tabular-nums" }}
       >
-        {money(amount)}/mo
+        {money(amount)}
       </span>
       <span
         className="split-pct w-[40px] text-right whitespace-nowrap"

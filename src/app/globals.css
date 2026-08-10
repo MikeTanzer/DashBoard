@@ -369,6 +369,23 @@ body {
   container-type: inline-size;
 }
 
+/* The figure is what the tile exists to show, so it sits centred with its unit
+   under it rather than left-rag against a wide empty right side. */
+.tile-grid .card {
+  text-align: center;
+}
+
+.tile-grid .card .split-row {
+  justify-content: center;
+}
+
+.tile-unit {
+  font-size: 11px;
+  line-height: 1.3;
+  margin-top: 1px;
+  color: var(--text-muted);
+}
+
 /* Tiles stay a uniform height — a ragged row of twelve boxes reads as broken
    rather than compact. The empty space that made stretching look bad came from
    ONE tile being much taller than the rest, so the fix is capping what makes a

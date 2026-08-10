@@ -10,6 +10,12 @@ interface Props {
   hint?: string;
   /** Small qualifier next to the value, e.g. "All time". */
   note?: string;
+  /**
+   * Unit for the figure, on its own line and spelled out — "per month" rather
+   * than "/mo". Suffixed onto the number it competed with the digits for the
+   * eye, and at tile width it was the thing that forced the figure to shrink.
+   */
+  unit?: string;
   span?: 1 | 2;
   /** Whether this tile is driving the main chart. */
   selected?: boolean;
@@ -24,6 +30,7 @@ export function StatTile({
   delta,
   hint,
   note,
+  unit,
   span = 1,
   selected,
   onSelect,
@@ -59,6 +66,7 @@ export function StatTile({
           <div className="display text-[30px]">
             {format(metric.value)}
           </div>
+          {unit ? <div className="tile-unit">{unit}</div> : null}
           <div className="flex items-baseline gap-2 min-h-[16px]">
             {delta ? <Delta {...delta} /> : null}
             {note ?? metric.note ? (

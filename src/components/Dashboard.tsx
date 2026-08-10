@@ -398,7 +398,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             label="Runway"
             {...tilePick("runway")}
             metric={m.runwayMonths}
-            format={(v) => `${v.toFixed(1)} mo`}
+            format={(v) => v.toFixed(1)}
+            unit="months"
             hint={
               m.runwayMonths.available
                 ? m.sharedExcludedCents > 0
@@ -412,7 +413,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             label="Average revenue per employee"
             {...tilePick("revPerEmployee")}
             metric={m.revenuePerEmployee}
-            format={(v) => `${compactMoney(v)}/yr`}
+            format={(v) => compactMoney(v)}
+            unit="per year"
             hint={
               m.revenuePerEmployee.available && m.employees !== null
                 ? `Annual run rate across ${m.employees} employee${m.employees === 1 ? "" : "s"}`
