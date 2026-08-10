@@ -67,7 +67,7 @@ export function StatTile({
             {format(metric.value)}
           </div>
           {unit ? <div className="tile-unit">{unit}</div> : null}
-          <div className="flex items-baseline gap-2 min-h-[16px]">
+          <div className="tile-note flex items-baseline gap-2 min-h-[16px]">
             {delta ? <Delta {...delta} /> : null}
             {note ?? metric.note ? (
               <span className="text-xs" style={{ color: "var(--text-muted)" }}>

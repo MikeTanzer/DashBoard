@@ -436,9 +436,22 @@ body {
   margin-top: auto;
 }
 
+/* The note under the figure is a flex row, so text-align can't touch it —
+   it needs its own centring. Both it and the hint get real space above them;
+   they were sitting against the number and reading as part of it. */
+.tile-grid .card .tile-note {
+  justify-content: center;
+  margin-top: 6px;
+}
+
 .tile-grid .card > .text-xs:last-child {
   margin-top: auto;
-  padding-top: 8px;
+  padding-top: 12px;
+  text-align: center;
+}
+
+.tile-grid .card .tile-unit {
+  margin-top: 3px;
 }
 
 .tile-grid .card .split-row {
