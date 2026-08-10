@@ -1903,7 +1903,11 @@ function rollUpMonths(
 
 /** "Q2" / "2026" for the axis. */
 function bucketShortLabel(key: string): string {
-  return key.includes("-Q") ? key.split("-")[1] : key;
+  if (!key.includes("-Q")) return key;
+  // "Q2 '26", so the axis can drop the year onto a second line. Bare "Q2"
+  // repeated across three years was ambiguous.
+  const [year, quarter] = key.split("-");
+  return `${quarter} '${year.slice(2)}`;
 }
 
 /** "Q2 2026" / "2026" for tooltips and the table. */

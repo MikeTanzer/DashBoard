@@ -137,6 +137,14 @@ export function axisTicks(max: number, count = 4): number[] {
  * put the wrong half on top.
  */
 export function periodLabelLines(label: string): [string, string | null] {
-  const m = label.match(/^(.*)\s(['\u2019]\d{2})$/);
-  return m ? [m[1], m[2]] : [label, null];
+  // "Mar '24" -> Mar / '24, and "Q2 '26" -> Q2 / '26.
+  const year = label.match(/^(.*)\s(['\u2019]\d{2})$/);
+  if (year) return [year[1], year[2]];
+
+  // "11 Jul" -> 11 / Jul. The number leads, so a run of days reads as a
+  // sequence with the month named underneath rather than repeated inline.
+  const day = label.match(/^(\d{1,2})\s([A-Za-z]{3,})$/);
+  if (day) return [day[1], day[2]];
+
+  return [label, null];
 }
