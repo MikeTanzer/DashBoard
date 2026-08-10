@@ -257,6 +257,111 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
 
         {/* Row 1 — reach: how much of the market we touch ------------------ */}
         <div className="grid grid-cols-2 gap-4 max-[640px]:gap-2.5 md:grid-cols-3 lg:grid-cols-6 mb-4 tile-grid">
+          {/* Row 1 — the money: what comes in, what goes out, what's left, and
+              how long it lasts. Revenue and Profit point the card at those
+              subjects rather than at a tile series, since both are already
+              subjects the card can be about. */}
+          <StatTile
+            label="Revenue · last 12 months"
+            selected={primary === "revenue" && !tile}
+            onSelect={() => {
+              setPrimary("revenue");
+              setTile(null);
+            }}
+            metric={m.revenueTrailing12}
+            format={(v) => compactMoney(v)}
+            hint={
+              m.revenueAllTime.available
+                ? `${compactMoney(m.revenueAllTime.value)} all time`
+                : undefined
+            }
+          />
+
+          {/* The RATE, not a window total: "$1.9M burned all time" says
+              nothing you can act on and swings with the range, while a monthly
+              figure compares across ranges and is what runway divides into. */}
+          <StatTile
+            label={
+              m.monthlyNet.available && m.monthlyNet.value < 0
+                ? "Burn rate"
+                : "Profit rate"
+            }
+            {...tilePick("net")}
+            metric={m.monthlyNet}
+            format={(v) => `${v < 0 ? "−" : ""}${compactMoney(Math.abs(v))}/mo`}
+            hint={
+              m.monthlyNetTrailing12.available
+                ? `${compactMoney(Math.abs(m.monthlyNetTrailing12.value))}/mo over the last 12 months${
+                    m.sharedExcludedCents > 0 ? " · direct costs only" : ""
+                  }`
+                : undefined
+            }
+          />
+
+          <StatTile
+            label={
+              m.netTrailing12.available && m.netTrailing12.value < 0
+                ? "Loss · last 12 months"
+                : "Profit · last 12 months"
+            }
+            selected={primary === "profit" && !tile}
+            onSelect={() => {
+              setPrimary("profit");
+              setTile(null);
+            }}
+            metric={m.netTrailing12}
+            format={(v) => `${v < 0 ? "−" : ""}${compactMoney(Math.abs(v))}`}
+            hint={
+              m.monthlyNetTrailing12.available
+                ? `${compactMoney(Math.abs(m.monthlyNetTrailing12.value))}/mo average`
+                : undefined
+            }
+          />
+
+          {/* A balance, not a flow: it doesn't move with the time range, so no
+              window is named here. The as-of date is the honest caveat — a
+              stale balance looks identical to a current one. */}
+          <StatTile
+            label="Cash on hand"
+            {...tilePick("cash")}
+            metric={m.cashOnHand}
+            format={(v) => money(v)}
+            hint={
+              m.cashOnHand.available
+                ? m.cashAsOf
+                  ? `As of ${m.cashAsOf}`
+                  : "As-of date not reported"
+                : undefined
+            }
+          />
+
+          <StatTile
+            label="Runway"
+            {...tilePick("runway")}
+            metric={m.runwayMonths}
+            format={(v) => `${v.toFixed(1)} mo`}
+            hint={
+              m.runwayMonths.available
+                ? m.sharedExcludedCents > 0
+                  ? "Cash ÷ burn · direct costs only, so this overstates"
+                  : "Cash on hand ÷ current burn"
+                : undefined
+            }
+          />
+
+          <StatTile
+            label="Average revenue per employee"
+            {...tilePick("revPerEmployee")}
+            metric={m.revenuePerEmployee}
+            format={(v) => `${compactMoney(v)}/yr`}
+            hint={
+              m.revenuePerEmployee.available && m.employees !== null
+                ? `Annual run rate across ${m.employees} employee${m.employees === 1 ? "" : "s"}`
+                : undefined
+            }
+          />
+
+          {/* Row 2 — reach: who we serve, where, and what they spend. ------ */}
           {/* The count is a live total — without cancellation dates we can't
               rebuild it for a past date, and a rising-only line would be a lie.
               The range drives arrivals, which we CAN compute exactly. */}
@@ -271,6 +376,26 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
                 : undefined
             }
           />
+
+          <StatTile
+            label="States with customers"
+            {...tilePick("states")}
+            metric={m.stateCount}
+            format={(v) => `${v} of 50`}
+            hint={
+              m.newStates.available
+                ? m.newStates.value > 0
+                  ? `+${m.newStates.value} entered ${windowPhrase(range)}`
+                  : `No new states ${windowPhrase(range)}`
+                : undefined
+            }
+          />
+
+          <RevenuePerCustomer
+            m={m}
+            {...tilePick("arpc")}
+          />
+
           {/* The total is a running count with no time dimension, so it can't
               track the range — but the share of it that has gone quiet in the
               selected window can, and that's the half worth acting on. */}
@@ -292,192 +417,35 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
                 : undefined
             }
           />
+
+          {/* "Active" needs defining somewhere, so the 30-day window moved from
+              the label into the hint rather than being dropped — a bare
+              "active consumers" would be a number with no rule behind it. */}
           <StatTile
-            label="States with customers"
-            {...tilePick("states")}
-            metric={m.stateCount}
-            format={(v) => `${v} of 50`}
-            hint={
-              m.newStates.available
-                ? m.newStates.value > 0
-                  ? `+${m.newStates.value} entered ${windowPhrase(range)}`
-                  : `No new states ${windowPhrase(range)}`
-                : undefined
-            }
-          />
-          {/* Pinned to 30 days rather than following the range: "ever
-              purchased" only ever grows, and a 7-day slice is noise. The
-              30-day count is the one that says whether the audience is
-              currently active and compares month to month. The chart below
-              still follows the selected range. */}
-          <StatTile
-            label="Consumers who purchased in the last 30 days"
-            metric={m.consumersPurchased30d}
+            label="Active consumers"
             {...tilePick("purchasers")}
+            metric={m.consumersPurchased30d}
             format={compactNumber}
             hint={
               m.consumersPurchased30d.available && m.consumersTracked.available
-                ? `${percent(m.consumersPurchased30d.value / m.consumersTracked.value, 1)} of tracked consumers`
+                ? `Bought in the last 30 days · ${percent(m.consumersPurchased30d.value / m.consumersTracked.value, 1)} of tracked`
                 : undefined
             }
           />
 
-        {/* Economics ----------------------------------------------------- */}
-          <RevenuePerCustomer
-            m={m}
-            {...tilePick("arpc")}
-          />
-
-          {/* A balance, not a flow: it doesn't move with the time range, so no
-              window is named here. The as-of date is the honest caveat — a
-              stale balance looks identical to a current one. */}
+          {/* Follows the selected range again, like the rest of this row. */}
           <StatTile
-            label="Cash on hand"
-            {...tilePick("cash")}
-            metric={m.cashOnHand}
-            format={(v) => money(v)}
-            hint={
-              m.cashOnHand.available
-                ? m.cashAsOf
-                  ? `As of ${m.cashAsOf}`
-                  : "As-of date not reported"
-                : undefined
-            }
-          />
-
-          {/* Shopper spend on our customers' storefronts — an order of
-              magnitude above our own revenue, so the label and the take-rate
-              hint both work to keep the two from being read as the same thing. */}
-          <StatTile
-            // Trailing twelve months, not the selected range: all-time GMV
-            // only grows and a weekly slice is noise, so neither compares to
-            // anything. The chart below still follows the range.
-            label="GMV · last 12 months"
+            label={`GMV · ${m.windowLabel}`}
             {...tilePick("gmv")}
-            metric={m.gmvTrailing12}
+            metric={m.gmvWindow}
             format={(v) => compactMoney(v)}
             hint={
-              m.gmvAllTime.available
-                ? `${compactMoney(m.gmvAllTime.value)} all time${
-                    m.takeRate.available
-                      ? ` · we keep ${percent(m.takeRate.value, 2)}`
-                      : ""
-                  }`
-                : undefined
-            }
-          />
-
-          {/* Revenue per head sits with revenue per customer: the same
-              question asked of the other side of the business. */}
-          <StatTile
-            label="Revenue per employee"
-            {...tilePick("revPerEmployee")}
-            metric={m.revenuePerEmployee}
-            format={(v) => `${compactMoney(v)}/yr`}
-            hint={
-              m.revenuePerEmployee.available && m.employees !== null
-                ? `Annual run rate across ${m.employees} employee${m.employees === 1 ? "" : "s"}`
-                : undefined
-            }
-          />
-
-        {/* Cost tiles, with the other tile rows rather than stranded below the
-            map — same size, same shape, so they belong to the same block.
-            The breakdown card stays below, where the big sections live.
-            Expenses arrive monthly, so these
-            report themselves as untracked on a day-level window rather than
-            setting a whole month's costs against seven days of revenue. --- */}
-        
-          {/* Revenue, pinned to twelve months like GMV beside it. Selecting it
-              points the card at its Revenue view rather than a tile series —
-              revenue already IS one of the card's subjects, so a parallel
-              tile-driven chart would be a second way to reach the same place.
-              It replaces the Expenses tile rather than joining it: thirteen
-              tiles would leave a row of one, and expenses stays reachable from
-              the Expenses subject and the whole breakdown section below. */}
-          <StatTile
-            label="Revenue · last 12 months"
-            selected={primary === "revenue" && !tile}
-            onSelect={() => {
-              setPrimary("revenue");
-              setTile(null);
-            }}
-            metric={m.revenueTrailing12}
-            format={(v) => compactMoney(v)}
-            hint={
-              m.revenueAllTime.available
-                ? `${compactMoney(m.revenueAllTime.value)} all time`
-                : undefined
-            }
-          />
-
-
-          {/* Named for what it is: a positive figure is profit, a negative one
-              is burn, and the label follows the sign rather than making the
-              reader work out which. */}
-          {/* The RATE leads, not the window total. "$1.9M burned over all
-              time" says nothing you can act on and swings wildly with the
-              range; "$56.9K a month" is the number that compares across
-              ranges and the one runway divides into. The total stays, small,
-              underneath. */}
-          <StatTile
-            label={
-              m.monthlyNet.available && m.monthlyNet.value < 0
-                ? "Monthly burn rate"
-                : "Monthly profit rate"
-            }
-            {...tilePick("net")}
-            metric={m.monthlyNet}
-            format={(v) => `${v < 0 ? "−" : ""}${compactMoney(Math.abs(v))}/mo`}
-            hint={
-              m.monthlyNetTrailing12.available
-                ? `${compactMoney(Math.abs(m.monthlyNetTrailing12.value))}/mo over the last 12 months${
-                    m.sharedExcludedCents > 0 ? " · direct costs only" : ""
-                  }`
-                : undefined
-            }
-          />
-
-          <StatTile
-            label="Runway"
-            {...tilePick("runway")}
-            metric={m.runwayMonths}
-            format={(v) => `${v.toFixed(1)} mo`}
-            hint={
-              m.runwayMonths.available
-                ? m.sharedExcludedCents > 0
-                  ? "Cash ÷ burn · direct costs only, so this overstates"
-                  : "Cash on hand ÷ current burn"
-                : undefined
-            }
-          />
-
-          {/* Profit, pinned to twelve months and paired with the Revenue tile
-              above — selecting either points the card at that subject rather
-              than at a tile series. Replaces the revenue-change tile, whose
-              figure is still on the chart under the Revenue subject. */}
-          <StatTile
-            label={
-              m.monthlyNetTrailing12.available &&
-              m.monthlyNetTrailing12.value < 0
-                ? "Loss · last 12 months"
-                : "Profit · last 12 months"
-            }
-            selected={primary === "profit" && !tile}
-            onSelect={() => {
-              setPrimary("profit");
-              setTile(null);
-            }}
-            metric={m.netTrailing12}
-            format={(v) => `${v < 0 ? "−" : ""}${compactMoney(Math.abs(v))}`}
-            hint={
-              m.monthlyNetTrailing12.available
-                ? `${compactMoney(Math.abs(m.monthlyNetTrailing12.value))}/mo average`
+              m.takeRate.available
+                ? `We keep ${percent(m.takeRate.value, 2)} of it`
                 : undefined
             }
           />
         </div>
-
         {/* The map needs more room than a half column gives, and a nested
             horizontal scrollbar reads as a bug. ---------------------------- */}
         <div className="grid gap-4 mb-4">
