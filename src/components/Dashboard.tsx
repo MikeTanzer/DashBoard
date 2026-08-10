@@ -282,7 +282,11 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               subjects rather than at a tile series, since both are already
               subjects the card can be about. */}
           <StatTile
-            label="Revenue · last 12 months"
+            // The window moves below the figure. As part of the label it
+            // wrapped onto a second line above the number and pushed the whole
+            // tile taller than its neighbours.
+            label="Revenue"
+            note="Last 12 months"
             selected={primary === "revenue" && !tile}
             onSelect={() => {
               setPrimary("revenue");
@@ -322,7 +326,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             // One fixed label rather than one that swaps with the sign: the
             // figure already carries the minus, and a heading that renames
             // itself makes the tile hard to find twice in a row.
-            label="Profit/loss · last 12 months"
+            label="Profit/loss"
+            note="Last 12 months"
             selected={primary === "profit" && !tile}
             onSelect={() => {
               setPrimary("profit");
