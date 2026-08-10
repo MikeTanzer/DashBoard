@@ -185,24 +185,43 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
+          {/* Platform scope lives in the bar because it filters the whole
+              page, not just the chart — and the bar is sticky, so it stays
+              reachable however far you scroll. */}
+          <div className="flex items-center gap-3 topbar-controls">
+            <FilterBar
+              platforms={snapshot.platforms}
+              selected={selected}
+              range={range.id}
+              from={range.from}
+              to={range.to}
+              bucket={bucket}
+            />
           </div>
         </div>
+      </div>
+
+      {/* Fixed to the corner rather than in the bar: it's set once and then
+          never touched, so it doesn't need to occupy space beside controls
+          that are used constantly. */}
+      <div className="theme-fab">
+        <ThemeToggle />
       </div>
 
       <main className="shell py-7 sm:py-9">
         {snapshot.demo ? <DemoBanner /> : null}
 
-        {/* Platform scope, above everything it filters ------------------- */}
-        <div className="controls mb-4 flex flex-wrap items-center justify-between gap-3">
-          <FilterBar
-            platforms={snapshot.platforms}
-            selected={selected}
+        {/* The time controls dock to the chart they drive: same width, same
+            alignment, a hairline gap so the pair reads as one unit without the
+            strip being mistaken for part of the card's content. ------------ */}
+        <div className="chart-dock">
+          <RangePicker
             range={range.id}
+            platform={selected}
             from={range.from}
             to={range.to}
             bucket={bucket}
+            rangeDays={range.days}
           />
 
           <div className="seg" role="tablist" aria-label="Chart subject">
@@ -229,20 +248,6 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               </button>
             ))}
           </div>
-        </div>
-
-        {/* The time controls dock to the chart they drive: same width, same
-            alignment, a hairline gap so the pair reads as one unit without the
-            strip being mistaken for part of the card's content. ------------ */}
-        <div className="chart-dock">
-          <RangePicker
-            range={range.id}
-            platform={selected}
-            from={range.from}
-            to={range.to}
-            bucket={bucket}
-            rangeDays={range.days}
-          />
         </div>
 
         {/* Headline figure and the history behind it, in one card --------- */}

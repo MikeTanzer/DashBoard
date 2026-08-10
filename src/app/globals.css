@@ -270,6 +270,51 @@ body {
   background: linear-gradient(135deg, var(--navy) 0%, var(--navy-lift) 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding-top: env(safe-area-inset-top);
+  /* Sticky, because the platform filter now lives here and scopes the whole
+     page — a control that governs everything shouldn't scroll away from the
+     thing it governs. Below the date modal's z-index so that still covers it. */
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.theme-fab {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 60;
+}
+
+/* Off the navy bar now, so it needs its own surface rather than the
+   translucent white that only worked against the gradient. */
+.theme-fab .ghost-btn {
+  background: var(--surface-1);
+  border-color: var(--border-strong);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-card);
+}
+
+.theme-fab .ghost-btn:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+
+/* The chips sit on navy in both themes, so they take the topbar's ink rather
+   than the page's, which would be near-black in light mode. */
+.topbar-controls .chip {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.topbar-controls .chip[aria-pressed="true"] {
+  background: var(--coral);
+  border-color: var(--coral);
+  color: #fff;
+}
+
+.topbar-controls .control-scroll {
+  gap: 8px;
 }
 
 .topbar .muted {
@@ -503,13 +548,16 @@ body {
 /* The three groups live one level down, inside the picker's own row — the
    strip has a single child, so spacing it here did nothing. The child fills
    the strip and distributes its groups. */
-.chart-dock > * {
+/* The picker's row takes the slack so its three groups spread out; the
+   subject segment sits at the far right at its natural width. */
+.chart-dock > .control-scroll {
   flex: 1;
   min-width: 0;
+  justify-content: space-between;
 }
 
-.chart-dock .control-scroll {
-  justify-content: space-between;
+.chart-dock > .seg {
+  flex: 0 0 auto;
 }
 
 /* Squared top so it meets the strip cleanly. */
