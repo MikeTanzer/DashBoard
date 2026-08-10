@@ -304,8 +304,10 @@ export function RevenueCard({
                   ]
                 : showExpenseSplit
                   ? [
-                      ["var(--series-1)", "Operations"],
+                      // COGS first: it's the base of the stack and the term
+                      // people reach for when reading a cost breakdown.
                       ["var(--series-2)", "COGS"],
+                      ["var(--series-1)", "Operations"],
                     ]
                   : [
                       ["var(--series-1)", "SaaS"],

@@ -377,17 +377,17 @@ body {
   box-shadow: var(--shadow-card);
 }
 
-/* The strip's own row fills the width: ranges left, buckets beside them,
-   Custom pushed to the far edge, so the bar looks deliberate rather than
-   left-huddled with dead space. */
-.chart-dock > * {
-  flex: 1;
-  justify-content: flex-start;
+/* The three groups spread across the strip rather than huddling.
+   flex:1 on each child made the two segments share the left half and pushed
+   Custom to the far edge, leaving one enormous gap and two tight ones.
+   space-between with natural widths gives all three gaps the same size. */
+.chart-dock {
+  justify-content: space-between;
 }
 
-.chart-dock .relative {
+.chart-dock > * {
   flex: 0 0 auto;
-  margin-left: auto;
+  justify-content: flex-start;
 }
 
 /* Squared top so it meets the strip cleanly. */
@@ -402,11 +402,9 @@ body {
   }
   /* Below this width the strip scrolls sideways; a stretched child would
      fight the scroller. */
-  .chart-dock > * {
-    flex: 0 0 auto;
-  }
-  .chart-dock .relative {
-    margin-left: 0;
+  /* Back to a scroller at this width; space-between would strand the groups. */
+  .chart-dock {
+    justify-content: flex-start;
   }
 }
 
