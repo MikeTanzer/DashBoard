@@ -680,12 +680,30 @@ const consumersMonthly = [];
         );
       }
 
+      // Purchasers per state, per window — the same state shares applied to
+      // each window's national figure, with the largest state absorbing the
+      // rounding so every window still sums to its total.
+      const purchasersByState = {};
+      for (const [code] of entries) purchasersByState[code] = {};
+      for (const w of [7, 30, 90, 180, 365, "ever"]) {
+        let rest = purchasers[w];
+        entries.forEach(([code, weight], k) => {
+          const share =
+            k === entries.length - 1
+              ? rest
+              : Math.round(purchasers[w] * (weight / totalWeight));
+          purchasersByState[code][w] = share;
+          rest -= share;
+        });
+      }
+
       consumersMonthly.push({
         month,
         platform: p.platform,
         tracked,
         purchasers,
         byState,
+        purchasersByState,
       });
     }
   });

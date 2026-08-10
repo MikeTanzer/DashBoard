@@ -356,6 +356,43 @@ body {
 /* The signature card: navy gradient, mirroring the site's hero band. Chart
    colors inside are pinned to the dark-mode steps, which were validated
    against this exact ground — the surrounding page may still be light. */
+/**
+ * Tiles size their type to their OWN width, not the viewport.
+ *
+ * At six across a 1200px shell each tile is about 175px, which is narrower
+ * than the two-up mobile case the old media query covered — and a viewport
+ * query can't see that, because the viewport is wide. A container query can:
+ * the same rules now fire whenever a tile is actually narrow, whatever the
+ * column count or screen size that produced it.
+ */
+.tile-grid > * {
+  container-type: inline-size;
+}
+
+@container (max-width: 260px) {
+  .card .display {
+    font-size: clamp(17px, 11cqw, 26px);
+    letter-spacing: -0.03em;
+    overflow-wrap: anywhere;
+  }
+  .card .eyebrow {
+    overflow-wrap: anywhere;
+    hyphens: auto;
+  }
+  .split-row {
+    flex-wrap: wrap;
+    row-gap: 1px;
+    column-gap: 6px;
+    font-size: 11.5px;
+  }
+  .split-row .split-label {
+    flex: 0 0 auto;
+  }
+  .split-row .split-pct {
+    width: auto;
+  }
+}
+
 /* Dismiss control on the demo banner. Same 32px target as the date modal's. */
 .banner-close {
   display: grid;

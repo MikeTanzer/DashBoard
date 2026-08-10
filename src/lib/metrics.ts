@@ -245,6 +245,19 @@ export interface DashboardMetrics {
   customerSplit: Metric<StackPoint[]>;
   /** Consumers per period, split by state — or by region when there are many. */
   consumerSplit: Metric<StackPoint[]>;
+  /** States holding customers per period, split by region. */
+  stateSplit: Metric<StackPoint[]>;
+  /** Purchasers in the range's window per period, by state or region. */
+  purchaserSplit: Metric<StackPoint[]>;
+  /**
+   * Average revenue per customer per period, by region.
+   *
+   * NOT additive — averages don't sum — so this is drawn as grouped bars, not
+   * a stack. Stacking it would draw a total that means nothing.
+   */
+  arpcSplit: Metric<StackPoint[]>;
+  /** GMV per period, by region. */
+  gmvSplit: Metric<StackPoint[]>;
   /** Exclusive recency slices of the consumer base. */
   consumerRecency: Metric<RecencyBand[]>;
   /** The same slices scoped to one state, keyed by USPS code. */
@@ -1571,6 +1584,205 @@ export function computeMetrics(
     );
   })();
 
+  /** Region for a state, with a catch-all so nothing is silently dropped. */
+  const regionOf = (code: string | null) =>
+    code ? (REGION_OF[code] ?? "Other") : "Unknown";
+
+  /** Regions present in the customer base, in the standard order. */
+  const regionsPresent = (() => {
+    const seen = new Set(customers.map((c) => regionOf(c.state)));
+    return REGION_ORDER.filter((r) => seen.has(r)).concat(
+      [...seen].filter((r) => !REGION_ORDER.includes(r)),
+    );
+  })();
+
+  const stateSplit: Metric<StackPoint[]> = customerHistoryNeeds
+    ? unavailable(customerHistoryNeeds)
+    : !regionsPresent.length
+      ? unavailable(NEEDS_STATE)
+      : available(
+          windowRows.map((r) => {
+            const b = toBar(r);
+            const live = activeAsOf(bucketEndDate(r));
+            return {
+              key: b.key,
+              label: b.label,
+              full: b.full,
+              partial: b.partial,
+              // Distinct STATES per region, not customers — this tile counts
+              // states, so its split has to as well.
+              parts: regionsPresent.map((region) => ({
+                id: region,
+                label: region,
+                value: new Set(
+                  live
+                    .filter((c) => c.state && regionOf(c.state) === region)
+                    .map((c) => c.state),
+                ).size,
+              })),
+            };
+          }),
+        );
+
+  const purchaserSplit: Metric<StackPoint[]> = (() => {
+    const scoped = snapshot.consumersMonthly.filter((c) => inScope(c.platform));
+    if (!scoped.length) return unavailable(NEEDS_CONSUMERS);
+    if (!scoped.some((c) => c.purchasersByState)) {
+      return unavailable(
+        "Purchasers aren't broken down by state per month. Add a `purchasersByState` map to each monthly consumer rollup.",
+      );
+    }
+
+    const w = range.consumerWindow;
+    const states = new Set<string>();
+    for (const c of scoped) {
+      for (const code of Object.keys(c.purchasersByState ?? {})) states.add(code);
+    }
+    const byRegion = states.size > MAX_STATE_BANDS;
+
+    const bandsFor = (r: MonthRevenue | DayRevenue) => {
+      const key = "date" in r ? r.date.slice(0, 7) : monthSpan(r.month).end;
+      const rows = scoped.filter((c) => c.month <= key);
+      if (!rows.length) return new Map<string, number>();
+      const last = rows[rows.length - 1].month;
+      const out = new Map<string, number>();
+      for (const c of rows.filter((x) => x.month === last)) {
+        for (const [code, windows] of Object.entries(c.purchasersByState ?? {})) {
+          const v = windows[w];
+          if (typeof v !== "number") continue;
+          const band = byRegion ? regionOf(code) : code;
+          out.set(band, (out.get(band) ?? 0) + v);
+        }
+      }
+      return out;
+    };
+
+    const totals = new Map<string, number>();
+    for (const r of windowRows) {
+      for (const [band, v] of bandsFor(r)) totals.set(band, (totals.get(band) ?? 0) + v);
+    }
+    if (!totals.size) return unavailable(NEEDS_CONSUMERS);
+
+    const order = byRegion
+      ? REGION_ORDER.filter((x) => totals.has(x)).concat(
+          [...totals.keys()].filter((x) => !REGION_ORDER.includes(x)),
+        )
+      : [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+
+    return available(
+      windowRows.map((r) => {
+        const b = toBar(r);
+        const bands = bandsFor(r);
+        return {
+          key: b.key,
+          label: b.label,
+          full: b.full,
+          partial: b.partial,
+          parts: order.map((id) => ({
+            id,
+            label: byRegion ? id : (STATE_NAMES[id] ?? id),
+            value: bands.get(id) ?? 0,
+          })),
+        };
+      }),
+    );
+  })();
+
+  const arpcSplit: Metric<StackPoint[]> = customerHistoryNeeds
+    ? unavailable(customerHistoryNeeds)
+    : !regionsPresent.length
+      ? unavailable(NEEDS_STATE)
+      : available(
+          windowRows.map((r) => {
+            const b = toBar(r);
+            const live = activeAsOf(bucketEndDate(r));
+            return {
+              key: b.key,
+              label: b.label,
+              full: b.full,
+              partial: b.partial,
+              // Recurring rate per customer in the region. MRR rather than
+              // collected revenue, because revenue isn't broken down by state
+              // anywhere — MRR per customer is exact from the records.
+              parts: regionsPresent.map((region) => {
+                const mine = live.filter((c) => regionOf(c.state) === region);
+                const mrr = mine.reduce(
+                  (a, c) => a + c.mrrSaasCents + c.mrrUsageCents,
+                  0,
+                );
+                return {
+                  id: region,
+                  label: region,
+                  value: mine.length ? Math.round(mrr / mine.length) : 0,
+                };
+              }),
+            };
+          }),
+        );
+
+  const gmvSplit: Metric<StackPoint[]> = (() => {
+    const rows = snapshot.gmv.filter((g) => inScope(g.platform));
+    if (!rows.length) return unavailable(NEEDS_GMV);
+    if (!rows.some((g) => g.byState)) {
+      return unavailable(
+        "GMV isn't broken down by state. Add a `byState` map to each monthly GMV row.",
+      );
+    }
+
+    /** GMV by region for the months a plotted row covers. */
+    const bandsFor = (r: MonthRevenue | DayRevenue) => {
+      const out = new Map<string, number>();
+      // Day rows read the month they fall in; per-day-per-state GMV isn't
+      // stored, and a whole month's split across one day would be wrong.
+      const months = new Set<string>();
+      if ("date" in r) months.add(r.date.slice(0, 7));
+      else {
+        const span = monthSpan(r.month);
+        const [sy, sm] = span.start.split("-").map(Number);
+        const [ey, em] = span.end.split("-").map(Number);
+        for (let y = sy, mo = sm; y < ey || (y === ey && mo <= em); ) {
+          months.add(`${y}-${String(mo).padStart(2, "0")}`);
+          mo++;
+          if (mo > 12) {
+            mo = 1;
+            y++;
+          }
+        }
+      }
+      for (const g of rows.filter((x) => months.has(x.month))) {
+        for (const [code, v] of Object.entries(g.byState ?? {})) {
+          const band = regionOf(code);
+          out.set(band, (out.get(band) ?? 0) + v);
+        }
+      }
+      return out;
+    };
+
+    const totals = new Map<string, number>();
+    for (const r of windowRows) {
+      for (const [b, v] of bandsFor(r)) totals.set(b, (totals.get(b) ?? 0) + v);
+    }
+    if (!totals.size) return unavailable(NEEDS_GMV);
+
+    const order = REGION_ORDER.filter((x) => totals.has(x)).concat(
+      [...totals.keys()].filter((x) => !REGION_ORDER.includes(x)),
+    );
+
+    return available(
+      windowRows.map((r) => {
+        const b = toBar(r);
+        const bands = bandsFor(r);
+        return {
+          key: b.key,
+          label: b.label,
+          full: b.full,
+          partial: b.partial,
+          parts: order.map((id) => ({ id, label: id, value: bands.get(id) ?? 0 })),
+        };
+      }),
+    );
+  })();
+
   const gmvWindowTotal = (() => {
     // Match the keys the revenue window is already built from, so a quarter or
     // year rolls up identically instead of being re-derived.
@@ -1677,6 +1889,10 @@ export function computeMetrics(
     expenseSplit,
     customerSplit,
     consumerSplit,
+    stateSplit,
+    purchaserSplit,
+    arpcSplit,
+    gmvSplit,
     consumerRecency: recency,
     consumerRecencyByState,
     customerTenure,

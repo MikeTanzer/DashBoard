@@ -69,14 +69,12 @@ interface Props {
   expenseSplit?: Metric<ExpenseSplitPoint[]>;
   /** True when the expenses view owns the chart. */
   showExpenseSplit?: boolean;
-  /** Customers per period split by platform, for the customers tile. */
-  customerSplit?: Metric<StackPoint[]>;
-  /** True when the customers tile owns the chart. */
-  showCustomerSplit?: boolean;
-  /** Consumers per period split by state or region. */
-  consumerSplit?: Metric<StackPoint[]>;
-  /** True when the consumers tile owns the chart. */
-  showConsumerSplit?: boolean;
+  /**
+   * A breakdown that owns the chart, when the selected tile has one — split by
+   * platform, state or region depending on the tile. Resolved by the page,
+   * since only it knows which tile is selected.
+   */
+  stack?: { data: Metric<StackPoint[]>; title: string; mode: "stack" | "group"; format: "count" | "money" } | null;
   /** Shared overhead excluded by a platform filter, for the caveat line. */
   sharedExcludedCents?: number;
 }
@@ -108,10 +106,7 @@ export function RevenueCard({
   showProfitPair = false,
   expenseSplit,
   showExpenseSplit = false,
-  customerSplit,
-  showCustomerSplit = false,
-  consumerSplit,
-  showConsumerSplit = false,
+  stack,
   sharedExcludedCents = 0,
 }: Props) {
   const [view, setView] = useState<View>("chart");
@@ -222,22 +217,7 @@ export function RevenueCard({
    * captioned with a revenue figure. Only the three primaries change it — a
    * stat tile overrides the chart but leaves the subject alone.
    */
-  /** Whichever tile-driven stack owns the chart, if any. */
-  const activeStack = showCustomerSplit
-    ? customerSplit
-    : showConsumerSplit
-      ? consumerSplit
-      : null;
-
-  // Named from the bands themselves rather than guessed — the split falls back
-  // to regions when there are too many states to read.
-  const consumerBandKind =
-    consumerSplit?.available &&
-    (consumerSplit.value[0]?.parts ?? []).some((p) =>
-      ["Northeast", "Midwest", "South", "West"].includes(p.id),
-    )
-      ? "region"
-      : "state";
+  const activeStack = stack?.data ?? null;
 
   const headline = (() => {
     if (primary === "profit" && netProfit) {
@@ -371,10 +351,8 @@ export function RevenueCard({
       >
         <div className="flex items-baseline justify-between gap-3 mb-1">
           <h2 className="text-[13px] font-bold">
-            {showCustomerSplit
-              ? `Customers by ${unit}, split by platform`
-              : showConsumerSplit
-                ? `Consumers by ${unit}, split by ${consumerBandKind}`
+            {stack
+              ? `${stack.title} · by ${unit}`
               : showProfitPair
                 ? `Gross and net profit by ${unit}`
                 : showExpenseSplit
@@ -391,11 +369,21 @@ export function RevenueCard({
           ) : null}
         </div>
 
-        {activeStack?.available ? (
-          view === "chart" ? (
-            <StackedChart points={activeStack.value} />
+        {stack ? (
+          stack.data.available ? (
+            view === "chart" ? (
+              <StackedChart
+                points={stack.data.value}
+                mode={stack.mode}
+                format={stack.format}
+              />
+            ) : (
+              <StackedTable points={stack.data.value} />
+            )
           ) : (
-            <StackedTable points={activeStack.value} />
+            <div className="py-2">
+              <NotTracked needs={stack.data.needs} />
+            </div>
           )
         ) : showExpenseSplit && expenseSplit?.available ? (
           view === "chart" ? (

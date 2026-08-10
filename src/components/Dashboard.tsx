@@ -98,6 +98,27 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
 
   // Falls back to the revenue chart if the default selection turns out to be
   // unplottable for this data (no customer start dates, say).
+  /**
+   * Tiles that break down into parts drive a stacked (or grouped) chart rather
+   * than one flat series. Averages are grouped, not stacked — a stack of
+   * per-region averages would draw a total that doesn't exist.
+   */
+  const STACKS: Partial<
+    Record<
+      TileKey,
+      { data: typeof m.customerSplit; title: string; mode: "stack" | "group"; format: "count" | "money" }
+    >
+  > = {
+    customers: { data: m.customerSplit, title: "Customers by platform", mode: "stack", format: "count" },
+    consumers: { data: m.consumerSplit, title: "Consumers by region", mode: "stack", format: "count" },
+    states: { data: m.stateSplit, title: "States with customers, by region", mode: "stack", format: "count" },
+    purchasers: { data: m.purchaserSplit, title: `Purchasers by region · ${m.consumerWindowLabel}`, mode: "stack", format: "count" },
+    arpc: { data: m.arpcSplit, title: "Avg revenue per customer, by region", mode: "group", format: "money" },
+    gmv: { data: m.gmvSplit, title: "GMV by region", mode: "stack", format: "money" },
+  };
+
+  const activeStack = tile ? (STACKS[tile] ?? null) : null;
+
   const primarySeries =
     primary === "revenue"
       ? null
@@ -224,10 +245,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               showProfitPair={primary === "profit" && !tile}
               expenseSplit={m.expenseSplit}
               showExpenseSplit={primary === "expenses" && !tile}
-              customerSplit={m.customerSplit}
-              showCustomerSplit={tile === "customers"}
-              consumerSplit={m.consumerSplit}
-              showConsumerSplit={tile === "consumers"}
+              stack={activeStack}
               sharedExcludedCents={m.sharedExcludedCents}
             />
           ) : (
@@ -239,7 +257,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
         </div>
 
         {/* Row 1 — reach: how much of the market we touch ------------------ */}
-        <div className="grid grid-cols-2 gap-4 max-[640px]:gap-2.5 lg:grid-cols-4 mb-4">
+        <div className="grid grid-cols-2 gap-4 max-[640px]:gap-2.5 md:grid-cols-3 lg:grid-cols-6 mb-4 tile-grid">
           {/* The count is a live total — without cancellation dates we can't
               rebuild it for a past date, and a rising-only line would be a lie.
               The range drives arrivals, which we CAN compute exactly. */}
@@ -306,10 +324,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
                 : undefined
             }
           />
-        </div>
 
-        {/* Row 2 — economics. Four equal tiles, matching the row above. --- */}
-        <div className="grid grid-cols-2 gap-4 max-[640px]:gap-2.5 lg:grid-cols-4 mb-6">
+        {/* Economics ----------------------------------------------------- */}
           <RevenuePerCustomer
             m={m}
             {...tilePick("arpc")}
@@ -360,7 +376,6 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
                 : undefined
             }
           />
-        </div>
 
         {/* Cost tiles, with the other tile rows rather than stranded below the
             map — same size, same shape, so they belong to the same block.
@@ -368,7 +383,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             Expenses arrive monthly, so these
             report themselves as untracked on a day-level window rather than
             setting a whole month's costs against seven days of revenue. --- */}
-        <div className="grid grid-cols-2 gap-4 max-[640px]:gap-2.5 lg:grid-cols-4 mb-4">
+        
           <StatTile
             label={`Expenses · ${m.windowLabel}`}
             {...tilePick("expenses")}

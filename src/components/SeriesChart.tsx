@@ -811,7 +811,20 @@ export const stackColor = (i: number) =>
  * An N-part stacked column chart. Parts are given in stacking order, bottom
  * first, and their labels drive the card's legend.
  */
-export function StackedChart({ points }: { points: StackPoint[] }) {
+export function StackedChart({
+  points,
+  mode = "stack",
+  format = "count",
+}: {
+  points: StackPoint[];
+  /**
+   * "group" draws the parts side by side instead of stacked. Required
+   * whenever the parts don't ADD — an average per region can't be stacked,
+   * because the column height would be a number that doesn't exist.
+   */
+  mode?: "stack" | "group";
+  format?: "count" | "money";
+}) {
   const plotRef = useRef<HTMLDivElement>(null);
   const measured = useElementWidth(plotRef, 1100);
   const [hover, setHover] = useState<{
@@ -842,8 +855,16 @@ export function StackedChart({ points }: { points: StackPoint[] }) {
   );
   const barR = Math.min(4, barW / 3);
 
-  const totals = points.map((p) => p.parts.reduce((a, q) => a + q.value, 0));
+  const totals =
+    mode === "stack"
+      ? points.map((p) => p.parts.reduce((a, q) => a + q.value, 0))
+      : points.flatMap((p) => p.parts.map((q) => q.value));
   const { ticks, lo, hi } = niceScale(0, Math.max(1, ...totals));
+  const nParts = Math.max(1, points[0]?.parts.length ?? 1);
+  const groupW = Math.max(2, Math.floor((barW - (nParts - 1)) / nParts));
+  const fmtV = (v: number) => (format === "money" ? money(v) : fullNumber(v));
+  const fmtAxisV = (v: number) =>
+    format === "money" ? compactMoney(v) : compactNumber(v);
   const yOf = (v: number) => PLOT_H - ((v - lo) / (hi - lo || 1)) * PLOT_H;
 
   const show = (e: React.PointerEvent, p: StackPoint) => {
@@ -878,7 +899,7 @@ export function StackedChart({ points }: { points: StackPoint[] }) {
                   y={yOf(t) + 4}
                   textAnchor="end"
                 >
-                  {compactNumber(t)}
+                  {fmtAxisV(t)}
                 </text>
               </g>
             ))}
@@ -887,6 +908,51 @@ export function StackedChart({ points }: { points: StackPoint[] }) {
               {points.map((p, i) => {
                 const cx = LEFT + i * slot + slot / 2;
                 const x = Math.round(cx - barW / 2);
+                if (mode === "group") {
+                  return (
+                    <g
+                      key={p.key}
+                      opacity={p.partial ? 0.5 : 1}
+                      onPointerMove={(e) => show(e, p)}
+                      onPointerDown={(e) => show(e, p)}
+                      onMouseLeave={() => setHover(null)}
+                    >
+                      <rect
+                        x={cx - slot / 2}
+                        y={0}
+                        width={slot}
+                        height={PLOT_H}
+                        fill="transparent"
+                      />
+                      <g
+                        className="bar-rise"
+                        style={{
+                          transformOrigin: `0px ${TOP_PAD + PLOT_H}px`,
+                          animationDelay: `${Math.min(i * 26, 400)}ms`,
+                        }}
+                      >
+                        {p.parts.map((q, qi) => (
+                          <rect
+                            key={q.id}
+                            x={x + qi * (groupW + 1)}
+                            y={yOf(q.value)}
+                            width={groupW}
+                            height={Math.max(1, PLOT_H - yOf(q.value))}
+                            rx={Math.min(3, groupW / 3)}
+                            fill={stackColor(qi)}
+                          />
+                        ))}
+                      </g>
+                      <AxisPeriodLabel
+                        x={cx}
+                        y={PLOT_H + 17}
+                        label={p.label}
+                        partial={p.partial}
+                      />
+                    </g>
+                  );
+                }
+
                 let running = 0;
                 const segs = p.parts.map((q, qi) => {
                   const base = running;
@@ -972,12 +1038,14 @@ export function StackedChart({ points }: { points: StackPoint[] }) {
           {[...hover.p.parts].reverse().map((q) => (
             <div key={q.id} className="flex items-center gap-3">
               <span className="tip-label">{q.label}</span>
-              <span className="tip-value">{fullNumber(q.value)}</span>
+              <span className="tip-value">{fmtV(q.value)}</span>
             </div>
           ))}
-          <div className="tip-dim mt-1">
-            {fullNumber(hover.p.parts.reduce((a, q) => a + q.value, 0))} total
-          </div>
+          {mode === "stack" ? (
+            <div className="tip-dim mt-1">
+              {fmtV(hover.p.parts.reduce((a, q) => a + q.value, 0))} total
+            </div>
+          ) : null}
           {hover.p.partial ? (
             <div className="tip-dim mt-1">Still in progress</div>
           ) : null}

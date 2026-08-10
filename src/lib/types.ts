@@ -242,6 +242,11 @@ export interface ConsumerHistoryPoint {
    * March's, so applying it backwards would be an assumption dressed as data.
    */
   byState?: Record<string, number>;
+  /**
+   * Optional: that month's purchasers per state, per trailing window.
+   * Same shape as ConsumerStats.purchasersByState, recorded per month.
+   */
+  purchasersByState?: Record<string, Record<string, number>>;
 }
 
 /**
