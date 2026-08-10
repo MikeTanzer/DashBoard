@@ -112,7 +112,7 @@ export function NotTracked({ needs }: { needs: string }) {
   return (
     <div className="flex flex-col gap-1 py-0.5">
       <div
-        className="text-lg font-medium flex items-center gap-1.5"
+        className="untracked-head text-lg font-medium flex items-center gap-1.5"
         style={{ color: "var(--text-muted)" }}
       >
         <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">

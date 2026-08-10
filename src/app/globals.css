@@ -369,6 +369,41 @@ body {
   container-type: inline-size;
 }
 
+/* Tiles hug their content instead of stretching to the tallest in the row.
+   Grid items default to stretch, so one tile with a split table and a footnote
+   made every neighbour that tall — five of the six were mostly empty. Centring
+   the content inside that height only moved the void; letting the box shrink
+   removes it. */
+.tile-grid {
+  align-items: start;
+}
+
+@container (max-width: 300px) {
+  /* At six across, a tile is ~175px. Centred type reads better than a left rag
+     against that much empty right side, and it matches the two-up phone
+     layout, which is the same width problem. */
+  .card {
+    text-align: center;
+  }
+  .card .split-row {
+    justify-content: center;
+  }
+  /* The share is the least load-bearing figure in the row and the first thing
+     to wrap onto a line of its own. The amount stays. */
+  .card .split-pct {
+    display: none;
+  }
+  .card .untracked-head {
+    justify-content: center;
+  }
+  /* The tallest thing in the row was this footnote. The figures above it
+     already say 66% / 34%; at this width the sentence is what pushes every
+     neighbouring tile down. */
+  .card .split-footnote {
+    display: none;
+  }
+}
+
 @container (max-width: 260px) {
   .card .display {
     font-size: clamp(17px, 11cqw, 26px);

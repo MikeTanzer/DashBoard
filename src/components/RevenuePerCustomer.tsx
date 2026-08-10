@@ -83,7 +83,7 @@ export function RevenuePerCustomer({
 
           {m.avgUsagePerCustomer.available ? (
             <p
-              className="text-[11px] mt-1 leading-snug"
+              className="split-footnote text-[11px] mt-1 leading-snug"
               style={{ color: "var(--text-muted)" }}
             >
               {fullNumber(m.usageBillingCustomers)} of{" "}
