@@ -221,7 +221,11 @@ body {
    otherwise makes the entire dashboard slide on a phone. */
 html,
 body {
-  overflow-x: hidden;
+  /* clip, NOT hidden. overflow-x:hidden computes overflow-y to auto, which
+     makes the element a scroll container — and a scroll container breaks
+     position:sticky against the viewport, so the top bar silently stopped
+     sticking. clip suppresses the sideways scroll without creating one. */
+  overflow-x: clip;
 }
 
 /* Momentum scrolling for the chart/table scrollers on iOS. */
