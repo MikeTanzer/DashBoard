@@ -163,7 +163,14 @@ export function RevenueCard({
   // single-bucket window doesn't render one enormous slab. The floor itself is
   // held under the band — on a phone, 4px would exceed the band past ~75 bars
   // and the columns would fuse into a solid block.
-  const barW = Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85);
+  // Snapped to whole pixels. The stacked segments are a <rect> and a <path>,
+  // and at fractional coordinates the two rasterise their vertical edges
+  // differently — same width in the DOM, visibly different on screen, with
+  // the softer edge reading as a narrower bar. 1 viewBox unit is 1 CSS pixel
+  // here, so rounding puts both primitives on the same device pixels.
+  const barW = Math.round(
+    Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85),
+  );
   const barR = Math.min(4, barW / 3);
   const h = TOP_PAD + PLOT_H + AXIS_H;
 
@@ -454,7 +461,7 @@ export function RevenueCard({
                 <g key={`${bucket}-${bars.length}-${bars[0]?.key ?? ""}-${bars[bars.length - 1]?.key ?? ""}`}>
                 {bars.map((b, i) => {
                   const cx = startX + i * slot + slot / 2;
-                  const x = cx - barW / 2;
+                  const x = Math.round(cx - barW / 2);
                   const usageTop = yOf(b.usageCents);
                   const usageH = PLOT_H - usageTop;
                   // 2px surface gap, taken off the bottom of the SaaS segment.

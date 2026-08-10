@@ -56,7 +56,14 @@ export function SeriesChart({
   // Same widening rule as the revenue chart, so switching metrics doesn't
   // change the visual weight of a column.
   const fill = n <= 3 ? 0.34 : n >= 12 ? 0.7 : 0.34 + ((n - 3) / 9) * 0.36;
-  const barW = Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85);
+  // Snapped to whole pixels. The stacked segments are a <rect> and a <path>,
+  // and at fractional coordinates the two rasterise their vertical edges
+  // differently — same width in the DOM, visibly different on screen, with
+  // the softer edge reading as a narrower bar. 1 viewBox unit is 1 CSS pixel
+  // here, so rounding puts both primitives on the same device pixels.
+  const barW = Math.round(
+    Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85),
+  );
 
   const values = points.map((p) => p.value);
   // A series that dips below zero needs the axis to include zero on both
@@ -131,7 +138,7 @@ export function SeriesChart({
             <g key={`${series.title}-${points.length}-${points[0]?.key ?? ""}`}>
             {points.map((p, i) => {
               const cx = LEFT + i * slot + slot / 2;
-              const x = cx - barW / 2;
+              const x = Math.round(cx - barW / 2);
               const vy = yOf(p.value);
               const top = Math.min(vy, zeroY);
               const height = Math.abs(vy - zeroY);
@@ -327,7 +334,14 @@ export function ProfitPairChart({ points }: { points: ProfitPoint[] }) {
   // shows net in its own colour from the baseline up, with the gross overhang
   // above it: that overhang IS the operating expense.
   const fill = n <= 3 ? 0.34 : n >= 12 ? 0.7 : 0.34 + ((n - 3) / 9) * 0.36;
-  const barW = Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85);
+  // Snapped to whole pixels. The stacked segments are a <rect> and a <path>,
+  // and at fractional coordinates the two rasterise their vertical edges
+  // differently — same width in the DOM, visibly different on screen, with
+  // the softer edge reading as a narrower bar. 1 viewBox unit is 1 CSS pixel
+  // here, so rounding puts both primitives on the same device pixels.
+  const barW = Math.round(
+    Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85),
+  );
 
   const values = points.flatMap((p) => [p.grossCents, p.netCents]);
   const { ticks, lo, hi } = niceScale(
@@ -420,10 +434,10 @@ export function ProfitPairChart({ points }: { points: ProfitPoint[] }) {
                         animationDelay: `${Math.min(i * 26, 400)}ms`,
                       }}
                     >
-                      {bar(p.grossCents, cx - barW / 2, barW, "var(--series-1)", "g")}
+                      {bar(p.grossCents, Math.round(cx - barW / 2), barW, "var(--series-1)", "g")}
                       {bar(
                         p.netCents,
-                        cx - barW / 2,
+                        Math.round(cx - barW / 2),
                         barW,
                         p.netCents < 0
                           ? "var(--status-critical)"
@@ -538,7 +552,14 @@ export function ExpenseSplitChart({ points }: { points: ExpenseSplitPoint[] }) {
   const plotW = VB_W - LEFT - RIGHT;
   const slot = plotW / n;
   const fill = n <= 3 ? 0.34 : n >= 12 ? 0.7 : 0.34 + ((n - 3) / 9) * 0.36;
-  const barW = Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85);
+  // Snapped to whole pixels. The stacked segments are a <rect> and a <path>,
+  // and at fractional coordinates the two rasterise their vertical edges
+  // differently — same width in the DOM, visibly different on screen, with
+  // the softer edge reading as a narrower bar. 1 viewBox unit is 1 CSS pixel
+  // here, so rounding puts both primitives on the same device pixels.
+  const barW = Math.round(
+    Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85),
+  );
   const barR = Math.min(4, barW / 3);
 
   const totals = points.map((p) => p.cogsCents + p.opexCents);
@@ -585,7 +606,7 @@ export function ExpenseSplitChart({ points }: { points: ExpenseSplitPoint[] }) {
             <g key={`${points.length}-${points[0]?.key ?? ""}`}>
               {points.map((p, i) => {
                 const cx = LEFT + i * slot + slot / 2;
-                const x = cx - barW / 2;
+                const x = Math.round(cx - barW / 2);
                 const total = p.cogsCents + p.opexCents;
                 const cogsTop = yOf(p.cogsCents);
                 const cogsH = PLOT_H - cogsTop;
@@ -811,7 +832,14 @@ export function StackedChart({ points }: { points: StackPoint[] }) {
   const plotW = VB_W - LEFT - RIGHT;
   const slot = plotW / n;
   const fill = n <= 3 ? 0.34 : n >= 12 ? 0.7 : 0.34 + ((n - 3) / 9) * 0.36;
-  const barW = Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85);
+  // Snapped to whole pixels. The stacked segments are a <rect> and a <path>,
+  // and at fractional coordinates the two rasterise their vertical edges
+  // differently — same width in the DOM, visibly different on screen, with
+  // the softer edge reading as a narrower bar. 1 viewBox unit is 1 CSS pixel
+  // here, so rounding puts both primitives on the same device pixels.
+  const barW = Math.round(
+    Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85),
+  );
   const barR = Math.min(4, barW / 3);
 
   const totals = points.map((p) => p.parts.reduce((a, q) => a + q.value, 0));
@@ -858,7 +886,7 @@ export function StackedChart({ points }: { points: StackPoint[] }) {
             <g key={`${points.length}-${points[0]?.key ?? ""}`}>
               {points.map((p, i) => {
                 const cx = LEFT + i * slot + slot / 2;
-                const x = cx - barW / 2;
+                const x = Math.round(cx - barW / 2);
                 let running = 0;
                 const segs = p.parts.map((q, qi) => {
                   const base = running;
