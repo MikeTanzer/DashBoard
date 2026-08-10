@@ -282,17 +282,17 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               subjects rather than at a tile series, since both are already
               subjects the card can be about. */}
           <StatTile
-            // The window moves below the figure. As part of the label it
-            // wrapped onto a second line above the number and pushed the whole
-            // tile taller than its neighbours.
+            // Follows the selected range. The window sits under the figure
+            // rather than in the heading, where it wrapped onto a second line
+            // and pushed the tile taller than its neighbours.
             label="Revenue"
-            note="Last 12 months"
+            note={m.windowLabel}
             selected={primary === "revenue" && !tile}
             onSelect={() => {
               setPrimary("revenue");
               setTile(null);
             }}
-            metric={m.revenueTrailing12}
+            metric={m.windowTotal}
             format={(v) => compactMoney(v)}
             hint={
               m.revenueAllTime.available
@@ -326,18 +326,22 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             // One fixed label rather than one that swaps with the sign: the
             // figure already carries the minus, and a heading that renames
             // itself makes the tile hard to find twice in a row.
+            // Follows the range too — it sits beside Revenue and the two
+            // reading different windows would invite exactly the confusion
+            // this change fixes. Burn rate keeps its monthly figure, since a
+            // rate is the thing that shouldn't move with the window.
             label="Profit/loss"
-            note="Last 12 months"
+            note={m.windowLabel}
             selected={primary === "profit" && !tile}
             onSelect={() => {
               setPrimary("profit");
               setTile(null);
             }}
-            metric={m.netTrailing12}
+            metric={m.netProfitWindow}
             format={(v) => `${v < 0 ? "−" : ""}${compactMoney(Math.abs(v))}`}
             hint={
               m.monthlyNetTrailing12.available
-                ? `${compactMoney(Math.abs(m.monthlyNetTrailing12.value))}/mo average`
+                ? `${compactMoney(Math.abs(m.monthlyNetTrailing12.value))}/mo over 12 months`
                 : undefined
             }
           />
