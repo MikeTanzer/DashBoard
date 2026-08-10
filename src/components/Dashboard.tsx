@@ -101,7 +101,9 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
   const primarySeries =
     primary === "revenue"
       ? null
-      : m.tileSeries[primary === "profit" ? "net" : "expenses"];
+      : m.tileSeries[
+          primary === "profit" ? "net" : primary === "margin" ? "margin" : "expenses"
+        ];
 
   const activeSeries =
     tile && m.tileSeries[tile].points.available
@@ -162,6 +164,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
                 ["revenue", "Revenue"],
                 ["profit", "Profit"],
                 ["expenses", "Expenses"],
+                ["margin", "Margin"],
               ] as [Primary, string][]
             ).map(([id, label]) => (
               <button
@@ -216,6 +219,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               primary={primary}
               netProfit={m.netProfitWindow}
               expenses={m.expensesWindow}
+              grossMargin={m.grossMargin}
               sharedExcludedCents={m.sharedExcludedCents}
             />
           ) : (

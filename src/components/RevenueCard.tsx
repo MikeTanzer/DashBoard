@@ -12,7 +12,7 @@ import { useElementWidth } from "@/lib/useElementWidth";
 type View = "chart" | "table";
 
 /** What the card is about. Drives its headline and, by default, its chart. */
-export type Primary = "revenue" | "profit" | "expenses";
+export type Primary = "revenue" | "profit" | "expenses" | "margin";
 
 interface Props {
   /** Already sliced to the selected range by computeMetrics. */
@@ -39,6 +39,7 @@ interface Props {
   primary?: Primary;
   netProfit?: Metric<number>;
   expenses?: Metric<number>;
+  grossMargin?: Metric<number>;
   /** Shared overhead excluded by a platform filter, for the caveat line. */
   sharedExcludedCents?: number;
 }
@@ -65,6 +66,7 @@ export function RevenueCard({
   primary = "revenue",
   netProfit,
   expenses,
+  grossMargin,
   sharedExcludedCents = 0,
 }: Props) {
   const [view, setView] = useState<View>("chart");
@@ -199,6 +201,28 @@ export function RevenueCard({
         sub: sharedExcludedCents > 0
           ? `Direct costs only · excludes ${compactMoney(sharedExcludedCents)} shared overhead`
           : `Against ${money(windowTotalCents)} collected over the same period`,
+      };
+    }
+
+    if (primary === "margin" && grossMargin) {
+      if (!grossMargin.available) {
+        return {
+          eyebrow: `Gross margin · ${scopeLabel}`,
+          figure: "—",
+          sub: grossMargin.needs,
+        };
+      }
+      // Cost of revenue, recovered from the margin and the revenue it was
+      // taken on, so the caption states the two figures behind the ratio
+      // rather than just naming the categories.
+      const cogs = Math.round(windowTotalCents * (1 - grossMargin.value));
+      return {
+        eyebrow: `Gross margin · ${windowLabel} · ${scopeLabel}`,
+        figure: percent(grossMargin.value, 1),
+        sub:
+          sharedExcludedCents > 0
+            ? `${money(windowTotalCents)} collected, less ${money(cogs)} of direct cost of revenue`
+            : `${money(windowTotalCents)} collected, less ${money(cogs)} of cost of revenue`,
       };
     }
 
