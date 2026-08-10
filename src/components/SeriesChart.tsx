@@ -316,17 +316,17 @@ export function ProfitPairChart({ points }: { points: ProfitPoint[] }) {
   const n = Math.max(1, points.length);
   const plotW = VB_W - LEFT - RIGHT;
   const slot = plotW / n;
-  // One column per period, not two side by side. Gross and net share an x and
-  // are told apart by width: gross full, net narrower and drawn on top.
+  // One column per period, both bars the same width, net drawn over gross.
   //
-  // This works in both cases the data actually produces. Gross positive with
-  // net negative — the interesting one — puts them either side of zero, so
-  // they never touch. Both positive, and net is necessarily the shorter of the
-  // two (net = gross minus operating expense, which can't be negative), so the
-  // narrower bar sits inside the taller one and the overhang IS the opex.
+  // That reads correctly in both cases the data produces, which is why they
+  // don't need different widths to be told apart. Gross positive with net
+  // negative — the interesting one — puts them either side of zero and they
+  // never touch. Both positive, and net is necessarily the shorter (net =
+  // gross minus operating expense, which can't be negative), so the column
+  // shows net in its own colour from the baseline up, with the gross overhang
+  // above it: that overhang IS the operating expense.
   const fill = n <= 3 ? 0.34 : n >= 12 ? 0.7 : 0.34 + ((n - 3) / 9) * 0.36;
   const barW = Math.min(Math.max(4, Math.min(slot * fill, 120)), slot * 0.85);
-  const innerW = Math.max(3, barW * 0.52);
 
   const values = points.flatMap((p) => [p.grossCents, p.netCents]);
   const { ticks, lo, hi } = niceScale(
@@ -422,8 +422,8 @@ export function ProfitPairChart({ points }: { points: ProfitPoint[] }) {
                       {bar(p.grossCents, cx - barW / 2, barW, "var(--series-1)", "g")}
                       {bar(
                         p.netCents,
-                        cx - innerW / 2,
-                        innerW,
+                        cx - barW / 2,
+                        barW,
                         p.netCents < 0
                           ? "var(--status-critical)"
                           : "var(--series-2)",
