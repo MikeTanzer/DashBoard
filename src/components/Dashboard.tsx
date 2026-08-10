@@ -112,7 +112,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
     consumers: { data: m.consumerSplit, title: "Consumers by region", mode: "stack", format: "count" },
     states: { data: m.stateSplit, title: "States with customers, by region", mode: "stack", format: "count" },
     purchasers: { data: m.purchaserSplit, title: `Purchasers by region · ${m.consumerWindowLabel}`, mode: "stack", format: "count" },
-    arpc: { data: m.arpcSplit, title: "Avg revenue per customer, by region", mode: "group", format: "money" },
+
     gmv: { data: m.gmvSplit, title: "GMV by region", mode: "stack", format: "money" },
   };
 
@@ -240,8 +240,28 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               netProfit={m.netProfitWindow}
               expenses={m.expensesWindow}
               grossMargin={m.grossMargin}
-              profitPair={m.profitPair}
-              showProfitPair={primary === "profit" && !tile}
+              // Three tiles ask the same gross-versus-net question of
+              // different denominators: the whole business, one customer, one
+              // employee. They share the chart, and only the heading changes.
+              profitPair={
+                tile === "arpc"
+                  ? m.arpcPair
+                  : tile === "revPerEmployee"
+                    ? m.revPerEmployeePair
+                    : m.profitPair
+              }
+              pairTitle={
+                tile === "arpc"
+                  ? "Revenue and profit per customer"
+                  : tile === "revPerEmployee"
+                    ? "Revenue and profit per employee, annualised"
+                    : undefined
+              }
+              showProfitPair={
+                tile === "arpc" ||
+                tile === "revPerEmployee" ||
+                (primary === "profit" && !tile)
+              }
               expenseSplit={m.expenseSplit}
               showExpenseSplit={primary === "expenses" && !tile}
               stack={activeStack}

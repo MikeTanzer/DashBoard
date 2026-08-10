@@ -256,6 +256,17 @@ export interface DashboardMetrics {
    * a stack. Stacking it would draw a total that means nothing.
    */
   arpcSplit: Metric<StackPoint[]>;
+  /**
+   * Revenue per customer against profit per customer, per period.
+   *
+   * Gross is what the average customer pays; net is what's left of it after
+   * every cost, shared overhead included. The gap between them is what it
+   * costs to serve and support that customer plus their share of running the
+   * company — the number that says whether growth actually helps.
+   */
+  arpcPair: Metric<ProfitPoint[]>;
+  /** The same question per employee: revenue generated against profit left. */
+  revPerEmployeePair: Metric<ProfitPoint[]>;
   /** GMV per period, by region. */
   gmvSplit: Metric<StackPoint[]>;
   /** Exclusive recency slices of the consumer base. */
@@ -1765,6 +1776,53 @@ export function computeMetrics(
           }),
         );
 
+  const arpcPair: Metric<ProfitPoint[]> = customerHistoryNeeds
+    ? unavailable(customerHistoryNeeds)
+    : !hasExpenses || expensesNeedMonths
+      ? unavailable(expensesNeedMonths ?? NEEDS_EXPENSES)
+      : available(
+          windowRows.map((r) => {
+            const b = toBar(r);
+            const heads = activeAsOf(bucketEndDate(r)).length;
+            const net = r.totalCents - expenseTotalForRow(r);
+            return {
+              key: b.key,
+              label: b.label,
+              full: b.full,
+              partial: b.partial,
+              grossCents: heads > 0 ? Math.round(r.totalCents / heads) : 0,
+              netCents: heads > 0 ? Math.round(net / heads) : 0,
+            };
+          }),
+        );
+
+  const revPerEmployeePair: Metric<ProfitPoint[]> =
+    snapshot.headcount.length === 0
+      ? unavailable(NEEDS_HEADCOUNT)
+      : !hasExpenses || expensesNeedMonths
+        ? unavailable(expensesNeedMonths ?? NEEDS_EXPENSES)
+        : available(
+            windowRows.map((r) => {
+              const b = toBar(r);
+              const heads = headcountAt(
+                "date" in r ? r.date.slice(0, 7) : r.month,
+              );
+              // Annualised, so the figure reads like the tile above it rather
+              // than as one month's worth per head.
+              const factor = "date" in r ? 365 : 12;
+              const net = r.totalCents - expenseTotalForRow(r);
+              return {
+                key: b.key,
+                label: b.label,
+                full: b.full,
+                partial: b.partial,
+                grossCents:
+                  heads > 0 ? Math.round((r.totalCents * factor) / heads) : 0,
+                netCents: heads > 0 ? Math.round((net * factor) / heads) : 0,
+              };
+            }),
+          );
+
   const gmvSplit: Metric<StackPoint[]> = (() => {
     const rows = snapshot.gmv.filter((g) => inScope(g.platform));
     if (!rows.length) return unavailable(NEEDS_GMV);
@@ -2008,6 +2066,8 @@ export function computeMetrics(
     stateSplit,
     purchaserSplit,
     arpcSplit,
+    arpcPair,
+    revPerEmployeePair,
     gmvSplit,
     consumerRecency: recency,
     consumerRecencyByState,

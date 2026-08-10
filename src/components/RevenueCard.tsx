@@ -57,8 +57,13 @@ interface Props {
   netProfit?: Metric<number>;
   expenses?: Metric<number>;
   grossMargin?: Metric<number>;
-  /** Gross and net per period, plotted together in the profit view. */
+  /**
+   * A gross/net pair that owns the chart. Used by the Profit subject and by
+   * the revenue-per-customer tile, which asks the same question per customer.
+   */
   profitPair?: Metric<ProfitPoint[]>;
+  /** Heading for that pair, when it isn't the profit view's own. */
+  pairTitle?: string;
   /**
    * True when the profit view owns the chart — i.e. Profit is the subject AND
    * no stat tile is overriding it. The card can't work this out for itself:
@@ -103,6 +108,7 @@ export function RevenueCard({
   expenses,
   grossMargin,
   profitPair,
+  pairTitle,
   showProfitPair = false,
   expenseSplit,
   showExpenseSplit = false,
@@ -363,7 +369,7 @@ export function RevenueCard({
             {stack
               ? `${stack.title} · by ${unit}`
               : showProfitPair
-                ? `Gross and net profit by ${unit}`
+                ? (pairTitle ?? `Gross and net profit by ${unit}`)
                 : showExpenseSplit
                   ? `Cost of revenue and operations by ${unit}`
                   : series
