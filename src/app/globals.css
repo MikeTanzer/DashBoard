@@ -564,6 +564,15 @@ body {
   flex: 0 0 auto;
 }
 
+/* Bucket size and Custom as one unit, so space-between separates the ranges
+   from the pair instead of stranding Custom on its own. */
+.bucket-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 /* Squared top so it meets the strip cleanly. */
 .chart-dock + div > .hero-card {
   border-top-left-radius: 8px;

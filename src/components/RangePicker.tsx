@@ -240,6 +240,10 @@ export function RangePicker({
         ))}
       </div>
 
+      {/* Bucket size and Custom travel together: Custom is another way to set
+          the window, so sitting it beside Annually reads as one group rather
+          than a stray control marooned at the far edge. */}
+      <div className="bucket-group">
       <div className="seg" role="group" aria-label="Bucket size">
         {BUCKETS.map((b) => {
           const fits = b.id === "day" ? rangeDays <= 70 : rangeDays >= b.minDays;
@@ -321,6 +325,7 @@ export function RangePicker({
               document.body,
             )
           : null}
+      </div>
       </div>
     </div>
   );
