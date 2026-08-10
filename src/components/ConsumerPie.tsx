@@ -26,6 +26,7 @@ export function ConsumerPie({
   inset = false,
   totalLabel = "Tracked",
   format = "count",
+  showLegend = true,
 }: {
   bands: RecencyBand[];
   /** Compact form for the map corner: smaller ring, tighter legend, no toggle. */
@@ -34,6 +35,12 @@ export function ConsumerPie({
   totalLabel?: string;
   /** Values are people by default; expense slices are money. */
   format?: "count" | "money";
+  /**
+   * Set false where the slices are already direct-labelled next to the chart.
+   * The donut is normally the only view of its data and needs its own legend;
+   * beside a ranked list of the same rows it would just repeat every line.
+   */
+  showLegend?: boolean;
 }) {
   const [view, setView] = useState<View>("chart");
   const [active, setActive] = useState<string | null>(null);
@@ -165,6 +172,7 @@ export function ConsumerPie({
             </text>
           </svg>
 
+          {showLegend ? (
           <ul
             className={
               inset
@@ -219,6 +227,7 @@ export function ConsumerPie({
               </li>
             ))}
           </ul>
+          ) : null}
         </div>
       ) : (
         <table className="dataview mt-2">

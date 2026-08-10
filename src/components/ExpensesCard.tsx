@@ -133,18 +133,27 @@ export function ExpensesCard({
       )}
         </div>
 
+        {/* No legend on the donut: the bars to its left already direct-label
+            every slice with the same colour, amount and share, so a legend
+            here repeated all seven rows verbatim. The donut carries the shape
+            of the split and the total; the list carries the detail. */}
         <aside className="expense-split-side">
-          <ConsumerPie bands={rows} inset totalLabel="Total spend" format="money" />
+          <ConsumerPie
+            bands={rows}
+            inset
+            totalLabel="Total spend"
+            format="money"
+            showLegend={false}
+          />
+
           {m.grossMargin.available ? (
-            <p
-              className="text-[11px] mt-3 leading-snug"
-              style={{ color: "var(--text-muted)" }}
-            >
-              <strong style={{ color: "var(--text-secondary)" }}>
-                {percent(m.grossMargin.value, 1)} gross margin
-              </strong>{" "}
-              — revenue less the lines marked cost of revenue.
-            </p>
+            <div className="expense-margin">
+              <div className="eyebrow">Gross margin</div>
+              <div className="expense-margin-figure">
+                {percent(m.grossMargin.value, 1)}
+              </div>
+              <p>Revenue less the lines marked cost of revenue.</p>
+            </div>
           ) : null}
         </aside>
       </div>

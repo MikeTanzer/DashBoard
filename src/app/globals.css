@@ -1048,10 +1048,45 @@ a:focus-visible {
   min-width: 0;
 }
 
+.expense-split-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Reads as one figure with a caption, not a sentence with a number in it. */
+.expense-margin {
+  width: 100%;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+.expense-margin-figure {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.expense-margin p {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 @media (min-width: 1080px) {
   .expense-split {
-    grid-template-columns: 1fr 268px;
-    align-items: start;
+    /* Narrower than the old 268px: without a legend the column only has to
+       hold the ring, so the extra width went to the bars, which is where a
+       long category name and a wide amount actually compete for room. */
+    grid-template-columns: 1fr 200px;
+    align-items: center;
   }
 }
 
@@ -1060,7 +1095,9 @@ a:focus-visible {
    the thing that makes a ranked list hard to scan. */
 .expense-row {
   display: grid;
-  grid-template-columns: minmax(120px, 190px) 1fr auto 52px;
+  /* Amount gets a fixed column so the figures form a clean right-aligned
+     stack; they were ragged, each sitting wherever its bar happened to end. */
+  grid-template-columns: minmax(120px, 172px) 1fr 74px 46px;
   align-items: center;
   gap: 12px;
   font-size: 13px;
@@ -1101,6 +1138,7 @@ a:focus-visible {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  text-align: right;
 }
 
 .expense-share {
