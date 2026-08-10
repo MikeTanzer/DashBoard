@@ -319,11 +319,10 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           />
 
           <StatTile
-            label={
-              m.netTrailing12.available && m.netTrailing12.value < 0
-                ? "Loss · last 12 months"
-                : "Profit · last 12 months"
-            }
+            // One fixed label rather than one that swaps with the sign: the
+            // figure already carries the minus, and a heading that renames
+            // itself makes the tile hard to find twice in a row.
+            label="Profit/loss · last 12 months"
             selected={primary === "profit" && !tile}
             onSelect={() => {
               setPrimary("profit");
