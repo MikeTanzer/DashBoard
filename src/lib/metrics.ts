@@ -2276,10 +2276,13 @@ export function computeMetrics(
   const blocked = unavailable(NEEDS_STATE_MONEY);
   return {
     ...result,
+    // MRR and the run rate stay: they're summed from customer records, which
+    // DO carry a state, so they're exact here rather than allocated.
+    // Collected revenue doesn't, and neither do the bars built from it — left
+    // unblocked the chart would have drawn national revenue under a state.
+    bars: blocked,
     windowTotal: blocked,
     windowUsageShare: blocked,
-    annualRunRate: blocked,
-    monthlyRevenue: blocked,
     revenueChange: blocked,
     revenueTrailing12: blocked,
     revenueAllTime: blocked,

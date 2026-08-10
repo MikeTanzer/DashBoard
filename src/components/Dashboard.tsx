@@ -301,7 +301,13 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               bucket={bucket}
               windowLabel={m.windowLabel}
               scopeLabel={scopeLabel}
-              unavailableReason={m.bars.available ? undefined : m.bars.needs}
+              unavailableReason={
+                !m.windowTotal.available
+                  ? m.windowTotal.needs
+                  : m.bars.available
+                    ? undefined
+                    : m.bars.needs
+              }
               series={activeSeries}
               primary={primary}
               netProfit={m.netProfitWindow}
