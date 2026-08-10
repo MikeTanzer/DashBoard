@@ -51,6 +51,12 @@ interface Props {
   tenureByState?: Record<string, Metric<RecencyBand[]>>;
   /** Calendar months the window covers, for the per-month tooltip rows. */
   windowMonthCount?: number;
+  /**
+   * The selected state, owned by the page — picking one scopes the whole
+   * dashboard, not just this card, so the card can't hold it privately.
+   */
+  picked: string | null;
+  onPick: (code: string) => void;
 }
 
 /**
@@ -138,10 +144,11 @@ export function StatesCard({
   gmvWindowLabel,
   gmvUnavailable,
   windowMonthCount = 0,
+  picked: rawPicked,
+  onPick,
 }: Props) {
   const [view, setView] = useState<View>("map");
   const [dim, setDim] = useState<Dimension>("customers");
-  const [rawPicked, setPicked] = useState<string | null>(null);
 
   /**
    * Consumers per state only exist when the source groups them that way. If
@@ -214,8 +221,7 @@ export function StatesCard({
   };
 
   /** Clicking the selected state again clears it, so the map is its own toggle. */
-  const pick = (code: string) =>
-    setPicked((cur) => (cur === code ? null : code));
+  const pick = onPick;
 
   // Changing the platform filter can drop a state from the data entirely.
   // Derived rather than cleared in an effect: a selection that isn't in `data`
@@ -373,10 +379,7 @@ export function StatesCard({
                   {isCustomerDim ? "Customer tenure" : "Consumer recency"}
                 </h3>
                 {picked ? (
-                  <StateChip
-                    code={picked}
-                    onClear={() => setPicked(null)}
-                  />
+                  <StateChip code={picked} onClear={() => onPick(picked)} />
                 ) : null}
               </div>
 

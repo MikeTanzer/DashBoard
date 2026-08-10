@@ -24,6 +24,7 @@ import {
 import type { Grain } from "@/lib/range";
 import { axisTicks, compactMoney, money, percent } from "@/lib/format";
 import { NotTracked } from "./StatTile";
+import { STATE_NAMES } from "@/lib/states";
 import { useElementWidth } from "@/lib/useElementWidth";
 
 type View = "chart" | "table";
@@ -82,6 +83,10 @@ interface Props {
   stack?: { data: Metric<StackPoint[]>; title: string; mode: "stack" | "group"; format: "count" | "money" } | null;
   /** Shared overhead excluded by a platform filter, for the caveat line. */
   sharedExcludedCents?: number;
+  /** The selected state, if any — mirrored here so it can be cleared without
+   *  scrolling back to the map. */
+  stateFilter?: string | null;
+  onClearState?: () => void;
 }
 
 /**
@@ -114,6 +119,8 @@ export function RevenueCard({
   showExpenseSplit = false,
   stack,
   sharedExcludedCents = 0,
+  stateFilter,
+  onClearState,
 }: Props) {
   const [view, setView] = useState<View>("chart");
   const [hover, setHover] = useState<{
@@ -328,6 +335,29 @@ export function RevenueCard({
           {/* No key over a one-colour chart. The single-series views (cash,
               runway, revenue change and the rest) were showing SaaS / Usage,
               which named two series that weren't there. */}
+          {/* The same state chip as the map's, so the filter can be dropped
+              from either end of the page without scrolling to find it. */}
+          {stateFilter && onClearState ? (
+            <span className="state-chip">
+              {STATE_NAMES[stateFilter] ?? stateFilter}
+              <button
+                type="button"
+                onClick={onClearState}
+                aria-label={`Clear ${STATE_NAMES[stateFilter] ?? stateFilter} — show all states`}
+                title="Clear state filter"
+              >
+                <svg width="9" height="9" viewBox="0 0 9 9" aria-hidden="true">
+                  <path
+                    d="M1 1l7 7M8 1l-7 7"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </span>
+          ) : null}
+
           {singleSeries ? null : (
           <Legend
             pairs={

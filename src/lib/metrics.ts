@@ -364,6 +364,9 @@ const TENURE_RAMP = [600, 500, 400, 300, 200, 100];
 /** USPS codes the map draws that are not states. */
 const NON_STATE_CODES = new Set(["DC", "PR", "VI", "GU", "AS", "MP"]);
 
+const NEEDS_STATE_MONEY =
+  "Collected revenue, expenses, headcount and cash carry no state anywhere in the data — they arrive per platform and per month. Splitting them by state would mean allocating on some share, which reads as fact and isn't. Clear the state to see this figure.";
+
 const NEEDS_CUSTOMERS =
   "Connect Stripe, the internal admin API, or add customers to data/network.json.";
 const NEEDS_STATE =
@@ -391,14 +394,48 @@ export function computeMetrics(
   platformFilter: PlatformId[] | null,
   range: RangeSpec,
   bucket: Grain = range.grain,
+  /**
+   * A USPS code scopes the whole dashboard to one state.
+   *
+   * Only what genuinely carries a state can follow: customers and their MRR,
+   * consumers and purchasers, and GMV. Collected revenue, expenses, headcount
+   * and cash have no state on them anywhere in the model, so everything
+   * derived from those reports what it would need instead of being allocated
+   * by some share — a per-state P&L built on an allocation rule is exactly the
+   * kind of number that reads as fact and isn't.
+   */
+  stateFilter: string | null = null,
 ): DashboardMetrics {
   const inScope = (p: PlatformId) =>
     !platformFilter || platformFilter.length === 0 || platformFilter.includes(p);
 
-  const customers = snapshot.customers.filter(
-    (c) => inScope(c.platform) && c.status !== "churned",
-  );
-  const consumers = snapshot.consumers.filter((c) => inScope(c.platform));
+  const customers = snapshot.customers
+    .filter((c) => inScope(c.platform) && c.status !== "churned")
+    .filter((c) => !stateFilter || c.state === stateFilter);
+
+  /**
+   * Consumer rollups, narrowed to the selected state when there is one. The
+   * per-state maps are the source; the national totals say nothing about where
+   * anyone is, so they can't be split after the fact.
+   */
+  const consumers = snapshot.consumers
+    .filter((c) => inScope(c.platform))
+    .map((c) => {
+      if (!stateFilter) return c;
+      const tracked = c.consumersByState?.[stateFilter] ?? 0;
+      const windows = c.purchasersByState?.[stateFilter] ?? {};
+      return {
+        ...c,
+        tracked,
+        purchasers: windows,
+        consumersByState: c.consumersByState
+          ? { [stateFilter]: tracked }
+          : undefined,
+        purchasersByState: c.purchasersByState
+          ? { [stateFilter]: windows }
+          : undefined,
+      };
+    });
   const revenue = snapshot.revenue.filter((r) => inScope(r.platform));
   const revenueDaily = snapshot.revenueDaily.filter((r) => inScope(r.platform));
 
@@ -936,11 +973,18 @@ export function computeMetrics(
   // slice — so the two figures always describe the identical period.
   const gmvMonths = new Map<string, number>();
   for (const g of snapshot.gmv.filter((g) => inScope(g.platform))) {
-    gmvMonths.set(g.month, (gmvMonths.get(g.month) ?? 0) + g.amountCents);
+    // A state selection reads the per-state split; without one on a row that
+    // row contributes nothing rather than its national total.
+    const amount = stateFilter ? (g.byState?.[stateFilter] ?? 0) : g.amountCents;
+    gmvMonths.set(g.month, (gmvMonths.get(g.month) ?? 0) + amount);
   }
   const gmvDays = new Map<string, number>();
-  for (const g of snapshot.gmvDaily.filter((g) => inScope(g.platform))) {
-    gmvDays.set(g.date, (gmvDays.get(g.date) ?? 0) + g.amountCents);
+  if (!stateFilter) {
+    // Daily GMV has no state split — a day-level state figure would have to be
+    // invented from the month, so those windows report GMV as unavailable.
+    for (const g of snapshot.gmvDaily.filter((g) => inScope(g.platform))) {
+      gmvDays.set(g.date, (gmvDays.get(g.date) ?? 0) + g.amountCents);
+    }
   }
 
   // --- Expenses -------------------------------------------------------------
@@ -1172,6 +1216,19 @@ export function computeMetrics(
   };
 
   /** Consumer history summed across in-scope platforms, for a plotted row. */
+  /** Monthly consumer rollups, narrowed to the selected state. */
+  const consumersMonthlyScoped = snapshot.consumersMonthly
+    .filter((c) => inScope(c.platform))
+    .map((c) =>
+      stateFilter
+        ? {
+            ...c,
+            tracked: c.byState?.[stateFilter] ?? 0,
+            purchasers: c.purchasersByState?.[stateFilter] ?? {},
+          }
+        : c,
+    );
+
   const consumerHistoryAt = (
     r: MonthRevenue | DayRevenue,
     pick: (c: { tracked: number; purchasers: Record<string, number> }) => number,
@@ -1179,9 +1236,7 @@ export function computeMetrics(
     // A day row takes its month's figure — the rollup is monthly, and holding
     // a month's value flat across its days is what the source actually says.
     const key = "date" in r ? r.date.slice(0, 7) : monthSpan(r.month).end;
-    const rows = snapshot.consumersMonthly
-      .filter((c) => inScope(c.platform))
-      .filter((c) => c.month <= key);
+    const rows = consumersMonthlyScoped.filter((c) => c.month <= key);
     if (!rows.length) return 0;
     const last = rows[rows.length - 1].month;
     return rows.filter((c) => c.month === last).reduce((a, c) => a + pick(c), 0);
@@ -1963,7 +2018,7 @@ export function computeMetrics(
       ? range.window
       : `last ${take} ${bucket}${take === 1 ? "" : "s"}`;
 
-  return {
+  const result: DashboardMetrics = {
     windowLabel,
     stateGmvUnavailable,
     revenueTrailing12: (() => {
@@ -2209,6 +2264,40 @@ export function computeMetrics(
       p30 !== null && tracked > 0
         ? available(p30 / tracked)
         : unavailable(NEEDS_CONSUMERS),
+  };
+
+  /**
+   * Money with no state on it anywhere. Overridden at the boundary rather than
+   * threaded through every computation above, so exactly one place decides
+   * what a state selection can and cannot answer.
+   */
+  if (!stateFilter) return result;
+
+  const blocked = unavailable(NEEDS_STATE_MONEY);
+  return {
+    ...result,
+    windowTotal: blocked,
+    windowUsageShare: blocked,
+    annualRunRate: blocked,
+    monthlyRevenue: blocked,
+    revenueChange: blocked,
+    revenueTrailing12: blocked,
+    revenueAllTime: blocked,
+    expensesWindow: blocked,
+    netProfitWindow: blocked,
+    monthlyNet: blocked,
+    monthlyNetTrailing12: blocked,
+    monthlyExpenses: blocked,
+    netTrailing12: blocked,
+    runwayMonths: blocked,
+    grossMargin: blocked,
+    revenuePerEmployee: blocked,
+    expenseByCategory: blocked,
+    cashOnHand: blocked,
+    profitPair: blocked,
+    expenseSplit: blocked,
+    arpcPair: blocked,
+    revPerEmployeePair: blocked,
   };
 }
 

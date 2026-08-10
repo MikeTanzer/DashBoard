@@ -63,6 +63,11 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
    * Seeded from the URL once. Back/forward won't move it, which is the trade:
    * a filter is UI state, and the address bar is for sharing.
    */
+  /** Selected state. Scopes the whole page, so it lives here. */
+  const [pickedState, setPickedState] = useState<string | null>(null);
+  const pickState = (code: string) =>
+    setPickedState((cur) => (cur === code ? null : code));
+
   const [selected, setSelected] = useState<string[]>(
     platform ? platform.split(",").filter(Boolean) : [],
   );
@@ -80,6 +85,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
     selected.length ? selected : null,
     range,
     bucket,
+    pickedState,
   );
   const platforms = platformBreakdown(snapshot);
 
@@ -326,6 +332,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               expenseSplit={m.expenseSplit}
               showExpenseSplit={primary === "expenses" && !tile}
               stack={activeStack}
+              stateFilter={pickedState}
+              onClearState={() => setPickedState(null)}
               sharedExcludedCents={m.sharedExcludedCents}
             />
           ) : (
@@ -558,6 +566,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               gmvWindowLabel={m.windowLabel}
               gmvUnavailable={m.stateGmvUnavailable}
               windowMonthCount={m.windowMonthCount}
+              picked={pickedState}
+              onPick={pickState}
             />
           ) : (
             <EmptyCard
