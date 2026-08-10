@@ -436,8 +436,29 @@ export function computeMetrics(
           : undefined,
       };
     });
-  const revenue = snapshot.revenue.filter((r) => inScope(r.platform));
-  const revenueDaily = snapshot.revenueDaily.filter((r) => inScope(r.platform));
+  /**
+   * Revenue, narrowed to the selected state when the source carries a split.
+   * The SaaS/usage halves are kept so a state-scoped chart still stacks.
+   */
+  const scopeRevenue = <T extends { saasCents: number; usageCents: number; byState?: Record<string, { saasCents: number; usageCents: number }> }>(
+    rows: T[],
+  ): T[] =>
+    !stateFilter
+      ? rows
+      : rows.map((r) => {
+          const part = r.byState?.[stateFilter];
+          return { ...r, saasCents: part?.saasCents ?? 0, usageCents: part?.usageCents ?? 0 };
+        });
+
+  /** True when every in-scope row can actually be narrowed. */
+  const revenueHasState =
+    !stateFilter ||
+    snapshot.revenue.filter((r) => inScope(r.platform)).every((r) => r.byState);
+
+  const revenue = scopeRevenue(snapshot.revenue.filter((r) => inScope(r.platform)));
+  const revenueDaily = scopeRevenue(
+    snapshot.revenueDaily.filter((r) => inScope(r.platform)),
+  );
 
   const hasCustomers = customers.length > 0;
 
@@ -2274,18 +2295,26 @@ export function computeMetrics(
   if (!stateFilter) return result;
 
   const blocked = unavailable(NEEDS_STATE_MONEY);
+  // Revenue narrows cleanly when the source carries a per-state split, so it
+  // stays. Expenses, headcount and cash still don't, and everything derived
+  // from them goes with them.
+  const revenueBlocked = revenueHasState ? null : blocked;
   return {
     ...result,
+    ...(revenueBlocked
+      ? {
+          bars: revenueBlocked,
+          windowTotal: revenueBlocked,
+          windowUsageShare: revenueBlocked,
+          revenueChange: revenueBlocked,
+          revenueTrailing12: revenueBlocked,
+          revenueAllTime: revenueBlocked,
+        }
+      : {}),
     // MRR and the run rate stay: they're summed from customer records, which
     // DO carry a state, so they're exact here rather than allocated.
     // Collected revenue doesn't, and neither do the bars built from it — left
     // unblocked the chart would have drawn national revenue under a state.
-    bars: blocked,
-    windowTotal: blocked,
-    windowUsageShare: blocked,
-    revenueChange: blocked,
-    revenueTrailing12: blocked,
-    revenueAllTime: blocked,
     expensesWindow: blocked,
     netProfitWindow: blocked,
     monthlyNet: blocked,

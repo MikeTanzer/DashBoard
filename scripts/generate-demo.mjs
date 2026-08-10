@@ -141,6 +141,28 @@ const customers = [
 const MONTHLY_GROWTH = 1.031;
 const revenue = [];
 
+/**
+ * Split an amount across a platform's states, weighted by how its customers
+ * are distributed, with the largest state taking the rounding remainder so the
+ * parts sum EXACTLY to the whole. Revenue follows the customers who pay it.
+ */
+function splitByState(amountCents, states) {
+  const counts = new Map();
+  for (const code of states) counts.set(code, (counts.get(code) ?? 0) + 1);
+  const totalWeight = [...counts.values()].reduce((a, b) => a + b, 0);
+  const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+
+  const out = {};
+  let left = amountCents;
+  entries.forEach(([code, w], i) => {
+    const share =
+      i === entries.length - 1 ? left : Math.round(amountCents * (w / totalWeight));
+    out[code] = share;
+    left -= share;
+  });
+  return out;
+}
+
 for (const platform of ["webjoint", "menu"]) {
   const mine = customers.filter((c) => c.platform === platform);
   const saasNow = mine.reduce((a, c) => a + c.mrrSaasCents, 0);
@@ -163,12 +185,20 @@ for (const platform of ["webjoint", "menu"]) {
     // The current month is only billed as far as today.
     const elapsed = i === 0 ? TODAY.getUTCDate() / DAYS_IN_MONTH : 1;
 
-    revenue.push({
-      month,
-      platform,
-      saasCents: Math.round(saasNow * decay * saasWobble * elapsed),
-      usageCents: Math.round(usageNow * decay * usageWobble * elapsed),
-    });
+    const saasCents = Math.round(saasNow * decay * saasWobble * elapsed);
+    const usageCents = Math.round(usageNow * decay * usageWobble * elapsed);
+    const states = platform === "webjoint" ? WEBJOINT_STATES : MENU_STATES;
+    const saasByState = splitByState(saasCents, states);
+    const usageByState = splitByState(usageCents, states);
+    const byState = {};
+    for (const code of Object.keys(saasByState)) {
+      byState[code] = {
+        saasCents: saasByState[code],
+        usageCents: usageByState[code],
+      };
+    }
+
+    revenue.push({ month, platform, saasCents, usageCents, byState });
   }
 }
 
@@ -232,11 +262,22 @@ for (const platform of ["webjoint", "menu"]) {
       const usage = last ? usageLeft : Math.round(row.usageCents * share);
       saasLeft -= saas;
       usageLeft -= usage;
+      // Same state weights as the month, so a state-scoped 1W view reconciles
+      // with the same state's monthly figure.
+      const dayStates = platform === "webjoint" ? WEBJOINT_STATES : MENU_STATES;
+      const dSaas = splitByState(saas, dayStates);
+      const dUsage = splitByState(usage, dayStates);
+      const dayByState = {};
+      for (const code of Object.keys(dSaas)) {
+        dayByState[code] = { saasCents: dSaas[code], usageCents: dUsage[code] };
+      }
+
       revenueDaily.push({
         date: e.date,
         platform,
         saasCents: saas,
         usageCents: usage,
+        byState: dayByState,
       });
     });
   }

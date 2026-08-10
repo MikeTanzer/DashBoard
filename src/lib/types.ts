@@ -112,6 +112,15 @@ export interface RevenuePoint {
   platform: PlatformId;
   saasCents: number;
   usageCents: number;
+  /**
+   * Optional split of this month by USPS state code, keeping the SaaS/usage
+   * halves so a state-scoped chart can still stack them.
+   *
+   * Without it a state selection can show customers and consumers but not
+   * revenue, since revenue otherwise arrives per platform with no geography
+   * on it at all.
+   */
+  byState?: Record<string, { saasCents: number; usageCents: number }>;
 }
 
 /**
@@ -126,6 +135,7 @@ export interface RevenueDayPoint {
   platform: PlatformId;
   saasCents: number;
   usageCents: number;
+  byState?: Record<string, { saasCents: number; usageCents: number }>;
 }
 
 /**
