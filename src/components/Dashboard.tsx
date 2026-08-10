@@ -448,7 +448,13 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             {...tilePick("change")}
             metric={m.revenueChange}
             format={(v) => `${v >= 0 ? "+" : ""}${percent(v, 1)}`}
-            hint={`Complete periods only · vs ${priorPhrase(range)}`}
+            hint={
+              // All time compares year-over-year, so the caption has to say
+              // that rather than "the period before", which doesn't exist.
+              range.count === Infinity && !range.from
+                ? "Last 12 months vs the 12 before"
+                : `Complete periods only · vs ${priorPhrase(range)}`
+            }
           />
         </div>
 

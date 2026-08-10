@@ -648,9 +648,24 @@ export function computeMetrics(
         // below would name a number of months that, once reached, would simply
         // grow again — an ask that can never be satisfied reads as a data gap
         // when it's really a category error.
-        unavailable(
-          "All time has no period before it to compare against. Pick a bounded range — 3M, 12M or a custom window — to see a change.",
-        )
+        (() => {
+          // Year-over-year instead: the last twelve complete months against
+          // the twelve before them. Refusing outright was correct but
+          // unhelpful — "is the business bigger than a year ago" is answerable
+          // from the same data, and it's what the tile is being asked.
+          if (completeRows.length < 24) {
+            return unavailable(
+              `Year-over-year needs 24 complete ${dayGrain ? "days" : "months"} of history. There ${completeRows.length === 1 ? "is" : "are"} ${completeRows.length}.`,
+            );
+          }
+          const recent = completeRows.slice(-12);
+          const prior = completeRows.slice(-24, -12);
+          const a = sumBy(recent, (r) => r.totalCents);
+          const b = sumBy(prior, (r) => r.totalCents);
+          return b > 0
+            ? available((a - b) / b)
+            : unavailable("No revenue in the earlier year to compare against.");
+        })()
       : cmpPrior.length === cmpTake && cmpWindow.length === cmpTake && cmpPriorSum > 0
         ? available((cmpWindowSum - cmpPriorSum) / cmpPriorSum)
         : unavailable(
