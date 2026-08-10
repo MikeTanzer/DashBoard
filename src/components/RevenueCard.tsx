@@ -219,6 +219,10 @@ export function RevenueCard({
    */
   const activeStack = stack?.data ?? null;
 
+  /** One series on the chart means nothing for a two-swatch key to describe. */
+  const singleSeries =
+    !stack && !showProfitPair && !showExpenseSplit && !!series;
+
   const headline = (() => {
     if (primary === "profit" && netProfit) {
       if (!netProfit.available) {
@@ -315,6 +319,10 @@ export function RevenueCard({
         </div>
 
         <div className="flex items-center gap-4">
+          {/* No key over a one-colour chart. The single-series views (cash,
+              runway, revenue change and the rest) were showing SaaS / Usage,
+              which named two series that weren't there. */}
+          {singleSeries ? null : (
           <Legend
             pairs={
               activeStack?.available
@@ -341,6 +349,7 @@ export function RevenueCard({
                     ]
             }
           />
+          )}
           <ViewToggle view={view} onChange={setView} />
         </div>
       </div>
