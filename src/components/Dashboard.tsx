@@ -412,18 +412,16 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           <StatTile
             label={
               m.monthlyNet.available && m.monthlyNet.value < 0
-                ? "Monthly burn"
-                : "Monthly profit"
+                ? "Monthly burn rate"
+                : "Monthly profit rate"
             }
             {...tilePick("net")}
             metric={m.monthlyNet}
             format={(v) => `${v < 0 ? "−" : ""}${compactMoney(Math.abs(v))}/mo`}
             hint={
-              m.netProfitWindow.available
-                ? `${compactMoney(Math.abs(m.netProfitWindow.value))} total ${m.windowLabel}${
-                    m.sharedExcludedCents > 0
-                      ? ` · direct costs only, excludes ${compactMoney(m.sharedExcludedCents)} shared overhead`
-                      : ""
+              m.monthlyNetTrailing12.available
+                ? `${compactMoney(Math.abs(m.monthlyNetTrailing12.value))}/mo over the last 12 months${
+                    m.sharedExcludedCents > 0 ? " · direct costs only" : ""
                   }`
                 : undefined
             }

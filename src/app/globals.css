@@ -369,14 +369,10 @@ body {
   container-type: inline-size;
 }
 
-/* Tiles hug their content instead of stretching to the tallest in the row.
-   Grid items default to stretch, so one tile with a split table and a footnote
-   made every neighbour that tall — five of the six were mostly empty. Centring
-   the content inside that height only moved the void; letting the box shrink
-   removes it. */
-.tile-grid {
-  align-items: start;
-}
+/* Tiles stay a uniform height — a ragged row of twelve boxes reads as broken
+   rather than compact. The empty space that made stretching look bad came from
+   ONE tile being much taller than the rest, so the fix is capping what makes a
+   tile tall (below), not letting the boxes go ragged. */
 
 @container (max-width: 300px) {
   /* At six across, a tile is ~175px. Centred type reads better than a left rag
@@ -401,6 +397,15 @@ body {
      neighbouring tile down. */
   .card .split-footnote {
     display: none;
+  }
+  /* The untracked explanation is the tallest thing in the row by some margin
+     and it set the height for all twelve. Clamped here and readable in full on
+     hover or at a wider width, where the tile has room for it. */
+  .card .untracked-needs {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 }
 

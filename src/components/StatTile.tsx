@@ -135,8 +135,9 @@ export function NotTracked({ needs }: { needs: string }) {
         Not yet tracked
       </div>
       <div
-        className="text-xs leading-snug"
+        className="untracked-needs text-xs leading-snug"
         style={{ color: "var(--text-secondary)" }}
+        title={needs}
       >
         {needs}
       </div>

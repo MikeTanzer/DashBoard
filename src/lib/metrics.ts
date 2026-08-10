@@ -297,6 +297,8 @@ export interface DashboardMetrics {
    * across ranges and the one runway divides into.
    */
   monthlyNet: Metric<number>;
+  /** The same rate over the trailing twelve months, for a steadier comparison. */
+  monthlyNetTrailing12: Metric<number>;
   /** Months of cash left at the current burn. Unavailable when profitable. */
   runwayMonths: Metric<number>;
   /** (Revenue − cost of revenue) / revenue. Needs costOfRevenue flags. */
@@ -1912,6 +1914,21 @@ export function computeMetrics(
     windowMonthCount: windowMonths.size,
     expensesWindow,
     netProfitWindow,
+    monthlyNetTrailing12: (() => {
+      if (!hasExpenses) return unavailable(NEEDS_EXPENSES);
+      const months = [...new Set(snapshot.revenue.map((r) => r.month))]
+        .sort()
+        .slice(-12);
+      if (!months.length) return unavailable(NEEDS_REVENUE_HISTORY);
+      const keep = new Set(months);
+      const rev = snapshot.revenue
+        .filter((r) => inScope(r.platform) && keep.has(r.month))
+        .reduce((a, r) => a + r.saasCents + r.usageCents, 0);
+      const exp = snapshot.expenses
+        .filter((e) => keep.has(e.month) && expenseInScope(e))
+        .reduce((a, e) => a + e.amountCents, 0);
+      return available(Math.round((rev - exp) / months.length));
+    })(),
     monthlyNet:
       !hasExpenses || expensesNeedMonths
         ? (expensesWindow as Metric<number>)
