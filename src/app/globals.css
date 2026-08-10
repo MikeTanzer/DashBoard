@@ -381,13 +381,16 @@ body {
    flex:1 on each child made the two segments share the left half and pushed
    Custom to the far edge, leaving one enormous gap and two tight ones.
    space-between with natural widths gives all three gaps the same size. */
-.chart-dock {
-  justify-content: space-between;
+/* The three groups live one level down, inside the picker's own row — the
+   strip has a single child, so spacing it here did nothing. The child fills
+   the strip and distributes its groups. */
+.chart-dock > * {
+  flex: 1;
+  min-width: 0;
 }
 
-.chart-dock > * {
-  flex: 0 0 auto;
-  justify-content: flex-start;
+.chart-dock .control-scroll {
+  justify-content: space-between;
 }
 
 /* Squared top so it meets the strip cleanly. */
@@ -403,7 +406,7 @@ body {
   /* Below this width the strip scrolls sideways; a stretched child would
      fight the scroller. */
   /* Back to a scroller at this width; space-between would strand the groups. */
-  .chart-dock {
+  .chart-dock .control-scroll {
     justify-content: flex-start;
   }
 }
