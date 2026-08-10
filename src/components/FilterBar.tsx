@@ -1,9 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useTransition } from "react";
 import type { Platform } from "@/lib/types";
-import { DEFAULT_RANGE, defaultBucket, RANGES, type Grain, type RangeId } from "@/lib/range";
 import { PlatformLogo, hasPlatformLogo } from "./PlatformLogo";
 
 /**
@@ -19,43 +16,16 @@ import { PlatformLogo, hasPlatformLogo } from "./PlatformLogo";
 export function FilterBar({
   platforms,
   selected,
-  range,
-  from,
-  to,
-  bucket,
+  onChange,
 }: {
   platforms: Platform[];
   selected: string[];
-  /** Carried through so changing platform doesn't reset the time range. */
-  range: RangeId;
-  /** Custom-range bounds, carried for the same reason. */
-  from?: string;
-  to?: string;
-  /** Bucket size, carried so changing platform doesn't reset the chart grain. */
-  bucket?: Grain;
+  /** Called with the new selection. The page owns the state and the URL. */
+  onChange: (next: string[]) => void;
 }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-
   const all = selected.length === 0;
 
-  const setPlatforms = (next: string[]) => {
-    const params = new URLSearchParams();
-    if (next.length) params.set("platform", next.join(","));
-    if (range !== DEFAULT_RANGE) params.set("range", range);
-    if (range === "custom" && from && to) {
-      params.set("from", from);
-      params.set("to", to);
-    }
-    // Only carry the bucket when it isn't what this window would pick anyway,
-    // so the URL stays short for the common case.
-    const spec = RANGES.find((r) => r.id === range);
-    if (bucket && spec && bucket !== defaultBucket(spec)) {
-      params.set("grain", bucket);
-    }
-    const qs = params.toString();
-    startTransition(() => router.push(qs ? `/?${qs}` : "/", { scroll: false }));
-  };
+  const setPlatforms = onChange;
 
   /**
    * Clicking a platform scopes the dashboard to that platform. Clicking the
@@ -81,7 +51,7 @@ export function FilterBar({
       className="control-scroll flex flex-wrap items-center gap-2"
       role="group"
       aria-label="Platform"
-      style={{ opacity: pending ? 0.6 : 1, transition: "opacity 120ms" }}
+
     >
       {/* No "Platform" label. The chips — All platforms, and the two
           wordmarks — say what they are without one, and the row reads cleaner

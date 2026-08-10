@@ -418,10 +418,27 @@ body {
   container-type: inline-size;
 }
 
-/* The figure is what the tile exists to show, so it sits centred with its unit
-   under it rather than left-rag against a wide empty right side. */
+/* The figure is what the tile exists to show: centred both ways, with the
+   heading held off it by a clear gap so the two don't read as one block. The
+   card centres its content vertically, and the hint is pushed to the bottom so
+   the figure sits in the middle of the space rather than at the top of it. */
 .tile-grid .card {
   text-align: center;
+  justify-content: center;
+  min-height: 168px;
+}
+
+.tile-grid .card > .eyebrow {
+  margin-bottom: 10px;
+}
+
+.tile-grid .card .display {
+  margin-top: auto;
+}
+
+.tile-grid .card > .text-xs:last-child {
+  margin-top: auto;
+  padding-top: 8px;
 }
 
 .tile-grid .card .split-row {

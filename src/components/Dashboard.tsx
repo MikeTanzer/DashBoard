@@ -52,7 +52,29 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
     params.get("grain") ?? undefined,
   );
 
-  const selected = platform ? platform.split(",").filter(Boolean) : [];
+  /**
+   * Platform filter as component state, NOT a route change.
+   *
+   * router.push re-runs the whole client render, and on a page this tall that
+   * threw you back to the top — so filtering by platform while reading the map
+   * meant scrolling back down every time. The URL is still rewritten, so a
+   * filtered view stays shareable; it just isn't navigated to.
+   *
+   * Seeded from the URL once. Back/forward won't move it, which is the trade:
+   * a filter is UI state, and the address bar is for sharing.
+   */
+  const [selected, setSelected] = useState<string[]>(
+    platform ? platform.split(",").filter(Boolean) : [],
+  );
+
+  const changePlatforms = (next: string[]) => {
+    setSelected(next);
+    const params = new URLSearchParams(window.location.search);
+    if (next.length) params.set("platform", next.join(","));
+    else params.delete("platform");
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  };
   const m = computeMetrics(
     snapshot,
     selected.length ? selected : null,
@@ -202,10 +224,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             <FilterBar
               platforms={snapshot.platforms}
               selected={selected}
-              range={range.id}
-              from={range.from}
-              to={range.to}
-              bucket={bucket}
+              onChange={changePlatforms}
             />
           </div>
         </div>
