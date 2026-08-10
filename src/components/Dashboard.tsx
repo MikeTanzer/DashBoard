@@ -306,21 +306,19 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
                 : undefined
             }
           />
-          {/* Asks the source for the window this range actually covers. A
-              purchaser count isn't derivable from a neighbouring window, so an
-              uncomputed one reports itself rather than borrowing another's. */}
+          {/* Pinned to 30 days rather than following the range: "ever
+              purchased" only ever grows, and a 7-day slice is noise. The
+              30-day count is the one that says whether the audience is
+              currently active and compares month to month. The chart below
+              still follows the selected range. */}
           <StatTile
-            label={
-              m.consumerWindowLabel === "ever"
-                ? "Consumers who ever purchased"
-                : `Purchased in ${m.consumerWindowLabel}`
-            }
-            metric={m.consumersPurchased}
+            label="Consumers who purchased in the last 30 days"
+            metric={m.consumersPurchased30d}
             {...tilePick("purchasers")}
             format={compactNumber}
             hint={
-              m.consumersPurchased.available && m.consumersTracked.available
-                ? `${percent(m.consumersPurchased.value / m.consumersTracked.value, 1)} of tracked consumers`
+              m.consumersPurchased30d.available && m.consumersTracked.available
+                ? `${percent(m.consumersPurchased30d.value / m.consumersTracked.value, 1)} of tracked consumers`
                 : undefined
             }
           />
@@ -352,13 +350,20 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               magnitude above our own revenue, so the label and the take-rate
               hint both work to keep the two from being read as the same thing. */}
           <StatTile
-            label={`GMV · ${m.windowLabel}`}
+            // Trailing twelve months, not the selected range: all-time GMV
+            // only grows and a weekly slice is noise, so neither compares to
+            // anything. The chart below still follows the range.
+            label="GMV · last 12 months"
             {...tilePick("gmv")}
-            metric={m.gmvWindow}
+            metric={m.gmvTrailing12}
             format={(v) => compactMoney(v)}
             hint={
-              m.takeRate.available
-                ? `We keep ${percent(m.takeRate.value, 2)} of it`
+              m.gmvAllTime.available
+                ? `${compactMoney(m.gmvAllTime.value)} all time${
+                    m.takeRate.available
+                      ? ` · we keep ${percent(m.takeRate.value, 2)}`
+                      : ""
+                  }`
                 : undefined
             }
           />
@@ -399,25 +404,27 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
           {/* Named for what it is: a positive figure is profit, a negative one
               is burn, and the label follows the sign rather than making the
               reader work out which. */}
+          {/* The RATE leads, not the window total. "$1.9M burned over all
+              time" says nothing you can act on and swings wildly with the
+              range; "$56.9K a month" is the number that compares across
+              ranges and the one runway divides into. The total stays, small,
+              underneath. */}
           <StatTile
             label={
-              m.netProfitWindow.available && m.netProfitWindow.value < 0
-                ? `Net burn · ${m.windowLabel}`
-                : `Net profit · ${m.windowLabel}`
+              m.monthlyNet.available && m.monthlyNet.value < 0
+                ? "Monthly burn"
+                : "Monthly profit"
             }
             {...tilePick("net")}
-            metric={m.netProfitWindow}
-            format={(v) => `${v < 0 ? "−" : ""}${compactMoney(Math.abs(v))}`}
+            metric={m.monthlyNet}
+            format={(v) => `${v < 0 ? "−" : ""}${compactMoney(Math.abs(v))}/mo`}
             hint={
               m.netProfitWindow.available
-                ? m.sharedExcludedCents > 0
-                  ? // Without this the tile reads "Net profit $166K" for one
-                    // platform while the company is burning — true of its
-                    // direct costs, badly misleading on its own.
-                    `Direct costs only · excludes ${compactMoney(m.sharedExcludedCents)} shared overhead`
-                  : m.windowMonthCount > 0
-                    ? `${compactMoney(Math.abs(m.netProfitWindow.value / m.windowMonthCount))} per month`
-                    : undefined
+                ? `${compactMoney(Math.abs(m.netProfitWindow.value))} total ${m.windowLabel}${
+                    m.sharedExcludedCents > 0
+                      ? ` · direct costs only, excludes ${compactMoney(m.sharedExcludedCents)} shared overhead`
+                      : ""
+                  }`
                 : undefined
             }
           />

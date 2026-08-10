@@ -273,6 +273,16 @@ export interface DashboardMetrics {
   stateGmvUnavailable: string | null;
   /** GMV over the selected window — shopper spend, not our revenue. */
   gmvWindow: Metric<number>;
+  /** GMV across every month on record, for the small print. */
+  gmvAllTime: Metric<number>;
+  /**
+   * GMV over the trailing twelve months, whatever range is selected.
+   *
+   * An annual figure is what this number is for — "all time" GMV grows forever
+   * and a one-week slice is noise, so neither compares to anything. The chart
+   * below still follows the range; only the headline is pinned.
+   */
+  gmvTrailing12: Metric<number>;
   /** Our revenue as a share of that GMV, when both are known. */
   takeRate: Metric<number>;
 
@@ -281,6 +291,12 @@ export interface DashboardMetrics {
   expensesWindow: Metric<number>;
   /** Revenue minus expenses over the same months. Negative means burning. */
   netProfitWindow: Metric<number>;
+  /**
+   * The same figure as a monthly rate. A window total answers "how much over
+   * this period"; the rate answers "how fast", which is the one that compares
+   * across ranges and the one runway divides into.
+   */
+  monthlyNet: Metric<number>;
   /** Months of cash left at the current burn. Unavailable when profitable. */
   runwayMonths: Metric<number>;
   /** (Revenue − cost of revenue) / revenue. Needs costOfRevenue flags. */
@@ -1783,6 +1799,14 @@ export function computeMetrics(
     );
   })();
 
+  const gmvTrailing12Total = (() => {
+    const months = [...new Set(snapshot.gmv.map((g) => g.month))].sort().slice(-12);
+    const keep = new Set(months);
+    return snapshot.gmv
+      .filter((g) => inScope(g.platform) && keep.has(g.month))
+      .reduce((a, g) => a + g.amountCents, 0);
+  })();
+
   const gmvWindowTotal = (() => {
     // Match the keys the revenue window is already built from, so a quarter or
     // year rolls up identically instead of being re-derived.
@@ -1853,6 +1877,16 @@ export function computeMetrics(
   return {
     windowLabel,
     stateGmvUnavailable,
+    gmvAllTime: snapshot.gmv.length
+      ? available(
+          snapshot.gmv
+            .filter((g) => inScope(g.platform))
+            .reduce((a, g) => a + g.amountCents, 0),
+        )
+      : unavailable(NEEDS_GMV),
+    gmvTrailing12: snapshot.gmv.length
+      ? available(gmvTrailing12Total)
+      : unavailable(NEEDS_GMV),
     gmvWindow:
       gmvWindowTotal === null
         ? unavailable(dailyMissing ? NEEDS_DAILY_REVENUE : NEEDS_GMV)
@@ -1878,6 +1912,10 @@ export function computeMetrics(
     windowMonthCount: windowMonths.size,
     expensesWindow,
     netProfitWindow,
+    monthlyNet:
+      !hasExpenses || expensesNeedMonths
+        ? (expensesWindow as Metric<number>)
+        : available(Math.round(monthlyNetCents)),
     runwayMonths,
     grossMargin,
     revenuePerEmployee,
