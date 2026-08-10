@@ -717,19 +717,30 @@ h3 {
   padding: 16px;
 }
 
-/* Two columns side by side while there's room; stacked once there isn't.
-   Two date inputs on a 375px screen leave ~140px each, and a mm/dd/yyyy field
-   plus its calendar button needs more than that — they were squeezing. */
+/**
+ * From and To, always stacked.
+ *
+ * These were two columns that collapsed at a 420px VIEWPORT — but the popover
+ * is only ~278px of content whatever the viewport is, so on a wide screen the
+ * fields stayed side by side in a box far too narrow for them. Worse, grid
+ * items default to min-width:auto, so they refused to shrink below the
+ * intrinsic width of a mm/dd/yyyy field plus its calendar button and simply
+ * overflowed the popover instead.
+ *
+ * Stacking unconditionally fixes both: a date RANGE reads top-to-bottom
+ * anyway, and each field gets the full width at any container size.
+ */
 .date-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 10px;
 }
 
-@media (max-width: 420px) {
-  .date-fields {
-    grid-template-columns: 1fr;
-  }
+/* Belt and braces — nothing in here may exceed the box that holds it. */
+.date-fields > label,
+.date-fields > label > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .date-note {
@@ -808,6 +819,9 @@ h3 {
 .date-modal input[type="date"],
 .date-pop input[type="date"] {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--surface-2);
