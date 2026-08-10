@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { DashboardMetrics } from "@/lib/metrics";
 import { compactMoney, money, percent } from "@/lib/format";
+import { ConsumerPie } from "./ConsumerPie";
 import { NotTracked } from "./StatTile";
 
 type View = "bars" | "table";
@@ -74,6 +75,14 @@ export function ExpensesCard({
         </div>
       </header>
 
+      {/* Two encodings of one set of numbers, side by side. The ranked bars
+          answer "what is the biggest line", the donut answers "how much of the
+          whole is that" — the second question is genuinely hard to read off
+          bars, and the pair costs one extra column rather than a second card.
+          They were separate sections; merging them puts the comparison in one
+          place instead of asking the reader to hold it across a gap. */}
+      <div className="expense-split">
+        <div className="expense-split-main">
       {view === "bars" ? (
         <div className="flex flex-col gap-2.5">
           {rows.map((r) => (
@@ -122,6 +131,23 @@ export function ExpensesCard({
           </table>
         </div>
       )}
+        </div>
+
+        <aside className="expense-split-side">
+          <ConsumerPie bands={rows} inset totalLabel="Total spend" format="money" />
+          {m.grossMargin.available ? (
+            <p
+              className="text-[11px] mt-3 leading-snug"
+              style={{ color: "var(--text-muted)" }}
+            >
+              <strong style={{ color: "var(--text-secondary)" }}>
+                {percent(m.grossMargin.value, 1)} gross margin
+              </strong>{" "}
+              — revenue less the lines marked cost of revenue.
+            </p>
+          ) : null}
+        </aside>
+      </div>
     </section>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Bar, TileSeries } from "@/lib/metrics";
+import type { Metric } from "@/lib/types";
 import { SeriesChart, SeriesTable } from "./SeriesChart";
 import type { Grain } from "@/lib/range";
 import { axisTicks, compactMoney, money, percent } from "@/lib/format";
@@ -9,6 +10,9 @@ import { NotTracked } from "./StatTile";
 import { useElementWidth } from "@/lib/useElementWidth";
 
 type View = "chart" | "table";
+
+/** What the card is about. Drives its headline and, by default, its chart. */
+export type Primary = "revenue" | "profit" | "expenses";
 
 interface Props {
   /** Already sliced to the selected range by computeMetrics. */
@@ -31,6 +35,12 @@ interface Props {
    * above stays on revenue, which is the card's anchor figure.
    */
   series?: TileSeries | null;
+  /** Which figure the headline states. */
+  primary?: Primary;
+  netProfit?: Metric<number>;
+  expenses?: Metric<number>;
+  /** Shared overhead excluded by a platform filter, for the caveat line. */
+  sharedExcludedCents?: number;
 }
 
 /**
@@ -52,6 +62,10 @@ export function RevenueCard({
   scopeLabel,
   unavailableReason,
   series,
+  primary = "revenue",
+  netProfit,
+  expenses,
+  sharedExcludedCents = 0,
 }: Props) {
   const [view, setView] = useState<View>("chart");
   const [hover, setHover] = useState<{
@@ -147,6 +161,60 @@ export function RevenueCard({
     return (cur.totalCents - prev.totalCents) / prev.totalCents;
   };
 
+  /**
+   * The headline follows the card's subject, so an expenses chart is never
+   * captioned with a revenue figure. Only the three primaries change it — a
+   * stat tile overrides the chart but leaves the subject alone.
+   */
+  const headline = (() => {
+    if (primary === "profit" && netProfit) {
+      if (!netProfit.available) {
+        return {
+          eyebrow: `Net profit · ${scopeLabel}`,
+          figure: "—",
+          sub: netProfit.needs,
+        };
+      }
+      const v = netProfit.value;
+      return {
+        eyebrow: `${v < 0 ? "Net burn" : "Net profit"} · ${windowLabel} · ${scopeLabel}`,
+        figure: `${v < 0 ? "−" : ""}${money(Math.abs(v))}`,
+        sub: sharedExcludedCents > 0
+          ? `Direct costs only · excludes ${compactMoney(sharedExcludedCents)} shared overhead`
+          : `${money(windowTotalCents)} collected less expenses over the same period`,
+      };
+    }
+
+    if (primary === "expenses" && expenses) {
+      if (!expenses.available) {
+        return {
+          eyebrow: `Expenses · ${scopeLabel}`,
+          figure: "—",
+          sub: expenses.needs,
+        };
+      }
+      return {
+        eyebrow: `Expenses · ${windowLabel} · ${scopeLabel}`,
+        figure: money(expenses.value),
+        sub: sharedExcludedCents > 0
+          ? `Direct costs only · excludes ${compactMoney(sharedExcludedCents)} shared overhead`
+          : `Against ${money(windowTotalCents)} collected over the same period`,
+      };
+    }
+
+    return {
+      eyebrow: unavailableReason
+        ? `Revenue · ${scopeLabel}`
+        : `Revenue collected · ${windowLabel} · ${scopeLabel}`,
+      figure: unavailableReason ? "—" : money(windowTotalCents),
+      sub: `${
+        windowUsageShare !== null && !unavailableReason
+          ? `${percent(windowUsageShare)} from usage · `
+          : ""
+      }${money(mrrCents)} MRR · ${money(annualRunRateCents)} annual run rate`,
+    };
+  })();
+
   return (
     <section
       className="hero-card p-6 sm:p-7"
@@ -156,22 +224,13 @@ export function RevenueCard({
       {/* Headline ---------------------------------------------------------- */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="eyebrow">
-            {unavailableReason
-              ? `Revenue · ${scopeLabel}`
-              : `Revenue collected · ${windowLabel} · ${scopeLabel}`}
-          </div>
-          <div className="display hero-figure mt-2.5">
-            {unavailableReason ? "—" : money(windowTotalCents)}
-          </div>
+          <div className="eyebrow">{headline.eyebrow}</div>
+          <div className="display hero-figure mt-2.5">{headline.figure}</div>
           <div
             className="text-sm mt-2"
             style={{ color: "var(--text-secondary)" }}
           >
-            {windowUsageShare !== null && !unavailableReason
-              ? `${percent(windowUsageShare)} from usage · `
-              : ""}
-            {money(mrrCents)} MRR · {money(annualRunRateCents)} annual run rate
+            {headline.sub}
           </div>
           {hasPartial && !unavailableReason ? (
             <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { computeMetrics, platformBreakdown } from "@/lib/metrics";
 import type { TileKey } from "@/lib/metrics";
+import type { Primary } from "@/components/RevenueCard";
 import {
   priorPhrase,
   readRange,
@@ -67,7 +68,20 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
    * breakdown, which is otherwise unreachable since revenue has no tile of its
    * own.
    */
-  const [tile, setTile] = useState<TileKey | null>("arpc");
+  /**
+   * What the hero card is about: revenue, profit or expenses. This drives both
+   * its headline and its chart, so an expenses chart never sits under a
+   * revenue figure.
+   *
+   * The stat tiles below still override the CHART when one is selected — the
+   * headline stays on the primary, since that's the card's subject. Clicking
+   * the selected tile again drops back to whichever primary is active.
+   */
+  const [primary, setPrimary] = useState<Primary>("revenue");
+
+  // Was "arpc". With an explicit Revenue / Profit / Expenses control on the
+  // page, the card should open on the thing that control says it's showing.
+  const [tile, setTile] = useState<TileKey | null>(null);
   const pickTile = (k: TileKey) => setTile((cur) => (cur === k ? null : k));
 
   /**
@@ -84,8 +98,15 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
 
   // Falls back to the revenue chart if the default selection turns out to be
   // unplottable for this data (no customer start dates, say).
+  const primarySeries =
+    primary === "revenue"
+      ? null
+      : m.tileSeries[primary === "profit" ? "net" : "expenses"];
+
   const activeSeries =
-    tile && m.tileSeries[tile].points.available ? m.tileSeries[tile] : null;
+    tile && m.tileSeries[tile].points.available
+      ? m.tileSeries[tile]
+      : primarySeries;
 
   const scopeLabel =
     selected.length === 0
@@ -134,6 +155,30 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             to={range.to}
             bucket={bucket}
           />
+
+          <div className="seg" role="tablist" aria-label="Chart subject">
+            {(
+              [
+                ["revenue", "Revenue"],
+                ["profit", "Profit"],
+                ["expenses", "Expenses"],
+              ] as [Primary, string][]
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={primary === id && !tile}
+                onClick={() => {
+                  setPrimary(id);
+                  // A selected stat tile would keep overriding the chart and
+                  // make this control look inert.
+                  setTile(null);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* The time controls dock to the chart they drive: same width, same
@@ -168,6 +213,10 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               scopeLabel={scopeLabel}
               unavailableReason={m.bars.available ? undefined : m.bars.needs}
               series={activeSeries}
+              primary={primary}
+              netProfit={m.netProfitWindow}
+              expenses={m.expensesWindow}
+              sharedExcludedCents={m.sharedExcludedCents}
             />
           ) : (
             <EmptyCard
@@ -286,12 +335,18 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             }
           />
 
+          {/* Revenue per head sits with revenue per customer: the same
+              question asked of the other side of the business. */}
           <StatTile
-            label="Revenue change"
-            {...tilePick("change")}
-            metric={m.revenueChange}
-            format={(v) => `${v >= 0 ? "+" : ""}${percent(v, 1)}`}
-            hint={`Complete periods only · vs ${priorPhrase(range)}`}
+            label="Revenue per employee"
+            {...tilePick("revPerEmployee")}
+            metric={m.revenuePerEmployee}
+            format={(v) => `${compactMoney(v)}/yr`}
+            hint={
+              m.revenuePerEmployee.available && m.employees !== null
+                ? `Annual run rate across ${m.employees} employee${m.employees === 1 ? "" : "s"}`
+                : undefined
+            }
           />
         </div>
 
@@ -379,35 +434,20 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             }
           />
 
+          {/* Gross margin now lives in the expenses section, where the costs
+              it is computed from are listed. */}
           <StatTile
-            label="Gross margin"
-            {...tilePick("margin")}
-            metric={m.grossMargin}
-            format={(v) => percent(v, 1)}
-            hint={
-              m.grossMargin.available
-                ? "Revenue less hosting, payment fees and support"
-                : undefined
-            }
+            label="Revenue change"
+            {...tilePick("change")}
+            metric={m.revenueChange}
+            format={(v) => `${v >= 0 ? "+" : ""}${percent(v, 1)}`}
+            hint={`Complete periods only · vs ${priorPhrase(range)}`}
           />
         </div>
 
-        {/* Expense breakdown, beside revenue per employee ---------------- */}
-        <div className="grid gap-4 lg:grid-cols-3 mb-4">
-          <div className="lg:col-span-2">
-            <ExpensesCard m={m} windowLabel={m.windowLabel} />
-          </div>
-          <StatTile
-            label="Revenue per employee"
-            {...tilePick("revPerEmployee")}
-            metric={m.revenuePerEmployee}
-            format={(v) => `${compactMoney(v)}/yr`}
-            hint={
-              m.revenuePerEmployee.available && m.employees !== null
-                ? `Annual run rate across ${m.employees} employee${m.employees === 1 ? "" : "s"}`
-                : undefined
-            }
-          />
+        {/* Expense breakdown — bars and donut in one section -------------- */}
+        <div className="grid gap-4 mb-4">
+          <ExpensesCard m={m} windowLabel={m.windowLabel} />
         </div>
 
         {/* Platform breakdown ---------------------------------------------- */}

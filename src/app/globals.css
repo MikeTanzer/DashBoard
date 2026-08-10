@@ -1031,6 +1031,30 @@ a:focus-visible {
   }
 }
 
+/* The merged expenses section: ranked bars beside a donut of the same split.
+   Stacks below 1080px, matching the states card's breakpoint so the two big
+   sections reflow together rather than at different widths. */
+.expense-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+.expense-split-main {
+  min-width: 0;
+}
+
+.expense-split-side {
+  min-width: 0;
+}
+
+@media (min-width: 1080px) {
+  .expense-split {
+    grid-template-columns: 1fr 268px;
+    align-items: start;
+  }
+}
+
 /* Expense breakdown rows: label, bar, amount, share. Grid rather than flex so
    every row's columns line up regardless of label length — ragged amounts are
    the thing that makes a ranked list hard to scan. */

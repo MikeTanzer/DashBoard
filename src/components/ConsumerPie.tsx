@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { RecencyBand } from "@/lib/metrics";
-import { compactNumber, fullNumber, percent } from "@/lib/format";
+import { compactMoney, compactNumber, fullNumber, money, percent } from "@/lib/format";
 
 type View = "chart" | "table";
 
@@ -25,12 +25,15 @@ export function ConsumerPie({
   bands,
   inset = false,
   totalLabel = "Tracked",
+  format = "count",
 }: {
   bands: RecencyBand[];
   /** Compact form for the map corner: smaller ring, tighter legend, no toggle. */
   inset?: boolean;
   /** What the centre total counts — "Tracked" shoppers, or "Customers". */
   totalLabel?: string;
+  /** Values are people by default; expense slices are money. */
+  format?: "count" | "money";
 }) {
   const [view, setView] = useState<View>("chart");
   const [active, setActive] = useState<string | null>(null);
@@ -38,6 +41,9 @@ export function ConsumerPie({
   const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
 
   const total = bands.reduce((a, b) => a + b.value, 0);
+  const short = (v: number) =>
+    format === "money" ? compactMoney(v) : compactNumber(v);
+  const long = (v: number) => (format === "money" ? money(v) : fullNumber(v));
 
   const SIZE = inset ? 150 : 230;
   const R = inset ? 66 : 100;
@@ -142,7 +148,7 @@ export function ConsumerPie({
               className="display"
               style={{ fontSize: inset ? 19 : 26, fill: "var(--text-primary)" }}
             >
-              {compactNumber(total)}
+              {short(total)}
             </text>
             <text
               x={C}
@@ -199,7 +205,7 @@ export function ConsumerPie({
                   className="font-semibold"
                   style={{ fontVariantNumeric: "tabular-nums" }}
                 >
-                  {compactNumber(b.value)}
+                  {short(b.value)}
                 </span>
                 <span
                   className={inset ? "w-[38px] text-right" : "w-[46px] text-right"}
@@ -227,13 +233,13 @@ export function ConsumerPie({
             {bands.map((b) => (
               <tr key={b.key}>
                 <td>{b.label}</td>
-                <td className="num">{fullNumber(b.value)}</td>
+                <td className="num">{long(b.value)}</td>
                 <td className="num">{percent(b.share, 1)}</td>
               </tr>
             ))}
             <tr>
               <td className="font-semibold">Tracked consumers</td>
-              <td className="num font-semibold">{fullNumber(total)}</td>
+              <td className="num font-semibold">{long(total)}</td>
               <td className="num font-semibold">100.0%</td>
             </tr>
           </tbody>
@@ -245,7 +251,7 @@ export function ConsumerPie({
           <div className="font-semibold mb-1">{hovered.label}</div>
           <div className="flex items-baseline justify-between gap-6">
             <span className="tip-label">Consumers</span>
-            <span className="tip-value">{fullNumber(hovered.value)}</span>
+            <span className="tip-value">{long(hovered.value)}</span>
           </div>
           <div className="flex items-baseline justify-between gap-6">
             <span className="tip-label">Share</span>
