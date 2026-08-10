@@ -573,6 +573,15 @@ body {
   /* Rounded on top, nearly square where it meets the card. */
   border-radius: 16px 16px 6px 6px;
   box-shadow: var(--shadow-card);
+  /* Scrolls with the page until it meets the top bar, then freezes just under
+     it — the controls keep working however deep into the page you are. The
+     offset is the bar's MEASURED height (set from a ResizeObserver), because
+     the bar grows with chip wrapping and safe-area insets, and a hard-coded
+     number would leave a gap or an overlap. Below the bar's z-index (50) so
+     the bar always paints on top. */
+  position: sticky;
+  top: var(--topbar-h, 66px);
+  z-index: 40;
 }
 
 /* The three groups spread across the strip rather than huddling.

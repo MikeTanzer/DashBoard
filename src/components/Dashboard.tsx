@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { computeMetrics, platformBreakdown } from "@/lib/metrics";
 import type { TileKey } from "@/lib/metrics";
@@ -63,6 +63,28 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
    * Seeded from the URL once. Back/forward won't move it, which is the trade:
    * a filter is UI state, and the address bar is for sharing.
    */
+  /**
+   * The topbar's rendered height, published as a CSS variable so the control
+   * strip can stick exactly beneath it. Measured rather than hard-coded — the
+   * bar's height moves with the chip row wrapping, safe-area insets and touch
+   * hit-target sizing, and a wrong constant would leave either a gap or an
+   * overlap. Writes the style directly; no state, so no re-render.
+   */
+  const topbarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = topbarRef.current;
+    if (!el) return;
+    const apply = () =>
+      document.documentElement.style.setProperty(
+        "--topbar-h",
+        `${el.offsetHeight}px`,
+      );
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   /** Selected state. Scopes the whole page, so it lives here. */
   const [pickedState, setPickedState] = useState<string | null>(null);
   const pickState = (code: string) =>
@@ -206,7 +228,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
     <div className="min-h-dvh">
       {/* Navy bar, full bleed — the brand's loudest gesture, straight off
           webjoint.com's nav. Present in both themes, not just dark. --------- */}
-      <div className="topbar">
+      <div className="topbar" ref={topbarRef}>
         <div className="shell flex flex-wrap items-center justify-between gap-4 py-4">
           <div className="flex items-center gap-3">
             <Logo size={34} />
