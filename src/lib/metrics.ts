@@ -65,6 +65,22 @@ export interface SeriesPoint {
   partial?: boolean;
 }
 
+/**
+ * One period with both profit lines.
+ *
+ * Gross is revenue less cost of revenue; net is revenue less every cost. The
+ * gap between them is operating expense, which is the whole reason to show
+ * them together rather than picking one.
+ */
+export interface ProfitPoint {
+  key: string;
+  label: string;
+  full: string;
+  grossCents: number;
+  netCents: number;
+  partial?: boolean;
+}
+
 /** Which stat tile a series belongs to. */
 export type TileKey =
   | "customers"
@@ -183,6 +199,8 @@ export interface DashboardMetrics {
   consumersDormant: Metric<number>;
   /** A plottable series per stat tile, so a tile can drive the main chart. */
   tileSeries: Record<TileKey, TileSeries>;
+  /** Gross and net profit per plotted period, for the profit view. */
+  profitPair: Metric<ProfitPoint[]>;
   /** Exclusive recency slices of the consumer base. */
   consumerRecency: Metric<RecencyBand[]>;
   /** The same slices scoped to one state, keyed by USPS code. */
@@ -1335,6 +1353,24 @@ export function computeMetrics(
     },
   };
 
+  const profitPair: Metric<ProfitPoint[]> = !hasExpenses
+    ? unavailable(NEEDS_EXPENSES)
+    : expensesNeedMonths
+      ? unavailable(expensesNeedMonths)
+      : available(
+          windowRows.map((r) => {
+            const b = toBar(r);
+            return {
+              key: b.key,
+              label: b.label,
+              full: b.full,
+              grossCents: r.totalCents - expenseTotalForRow(r, true),
+              netCents: r.totalCents - expenseTotalForRow(r),
+              partial: b.partial,
+            };
+          }),
+        );
+
   const gmvWindowTotal = (() => {
     // Match the keys the revenue window is already built from, so a quarter or
     // year rolls up identically instead of being re-derived.
@@ -1437,6 +1473,7 @@ export function computeMetrics(
     sharedExcludedCents,
     employees: latestHeadcount,
     tileSeries,
+    profitPair,
     consumerRecency: recency,
     consumerRecencyByState,
     customerTenure,

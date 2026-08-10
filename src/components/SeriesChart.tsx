@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { SeriesPoint, TileSeries } from "@/lib/metrics";
+import type { ProfitPoint, SeriesPoint, TileSeries } from "@/lib/metrics";
 import { compactMoney, compactNumber, fullNumber, money } from "@/lib/format";
 import { useElementWidth } from "@/lib/useElementWidth";
 
@@ -270,4 +270,217 @@ function niceScale(min: number, max: number): {
     ticks.push(Number(t.toFixed(10)));
   }
   return { ticks, lo, hi: ticks[ticks.length - 1] };
+}
+
+/**
+ * Gross and net profit side by side, one pair of columns per period.
+ *
+ * Grouped rather than stacked: net is gross MINUS operating expense, not a
+ * component of it, so stacking the two would draw a total that means nothing.
+ * Side by side, the gap between the pair IS the operating expense, which is
+ * the reason to show both at once.
+ *
+ * Either line can go negative — a month can be gross-positive and net-negative,
+ * which is exactly the case worth seeing — so the zero line sits inside the
+ * plot and bars grow up or down from it.
+ */
+export function ProfitPairChart({ points }: { points: ProfitPoint[] }) {
+  const plotRef = useRef<HTMLDivElement>(null);
+  const measured = useElementWidth(plotRef, 1100);
+  const [hover, setHover] = useState<{
+    x: number;
+    y: number;
+    p: ProfitPoint;
+  } | null>(null);
+
+  const PLOT_H = 210;
+  const AXIS_H = 26;
+  const TOP_PAD = 20;
+  const LEFT = 64;
+  const RIGHT = 12;
+  const VB_W = Math.max(measured, 320);
+  const h = TOP_PAD + PLOT_H + AXIS_H;
+
+  const n = Math.max(1, points.length);
+  const plotW = VB_W - LEFT - RIGHT;
+  const slot = plotW / n;
+  // Two bars share the band, so each takes half the fill a single bar would.
+  const fill = n <= 3 ? 0.34 : n >= 12 ? 0.7 : 0.34 + ((n - 3) / 9) * 0.36;
+  const pairW = Math.min(Math.max(6, Math.min(slot * fill, 120)), slot * 0.85);
+  const barW = Math.max(3, (pairW - 3) / 2);
+
+  const values = points.flatMap((p) => [p.grossCents, p.netCents]);
+  const { ticks, lo, hi } = niceScale(
+    Math.min(0, ...values),
+    Math.max(0, ...values),
+  );
+  const yOf = (v: number) => PLOT_H - ((v - lo) / (hi - lo || 1)) * PLOT_H;
+  const zeroY = yOf(0);
+
+  const show = (e: React.PointerEvent, p: ProfitPoint) => {
+    const rect = plotRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setHover({ x: e.clientX - rect.left, y: e.clientY - rect.top, p });
+  };
+
+  const bar = (v: number, x: number, color: string, key: string) => {
+    const vy = yOf(v);
+    return (
+      <rect
+        key={key}
+        x={x}
+        y={Math.min(vy, zeroY)}
+        width={barW}
+        height={Math.max(1, Math.abs(vy - zeroY))}
+        rx={Math.min(3, barW / 3)}
+        fill={color}
+      />
+    );
+  };
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div className="overflow-x-auto" ref={plotRef}>
+        <svg
+          viewBox={`0 0 ${VB_W} ${h}`}
+          width="100%"
+          className="chart-revenue"
+          role="img"
+          aria-label="Gross and net profit over time"
+        >
+          <g transform={`translate(0 ${TOP_PAD})`}>
+            {ticks.map((t) => (
+              <g key={t}>
+                <line
+                  className={t === 0 ? "baseline" : "gridline"}
+                  x1={LEFT}
+                  x2={VB_W - RIGHT}
+                  y1={yOf(t)}
+                  y2={yOf(t)}
+                />
+                <text
+                  className="axis-text"
+                  x={LEFT - 10}
+                  y={yOf(t) + 4}
+                  textAnchor="end"
+                >
+                  {compactMoney(t)}
+                </text>
+              </g>
+            ))}
+
+            <g key={`${points.length}-${points[0]?.key ?? ""}`}>
+              {points.map((p, i) => {
+                const cx = LEFT + i * slot + slot / 2;
+                const left = cx - pairW / 2;
+                return (
+                  <g
+                    key={p.key}
+                    opacity={p.partial ? 0.5 : 1}
+                    onPointerMove={(e) => show(e, p)}
+                    onPointerDown={(e) => show(e, p)}
+                    onMouseLeave={() => setHover(null)}
+                  >
+                    <rect
+                      x={cx - slot / 2}
+                      y={0}
+                      width={slot}
+                      height={PLOT_H}
+                      fill="transparent"
+                    />
+                    <g
+                      className="bar-rise"
+                      style={{
+                        transformOrigin: `0px ${TOP_PAD + zeroY}px`,
+                        animationDelay: `${Math.min(i * 26, 400)}ms`,
+                      }}
+                    >
+                      {bar(p.grossCents, left, "var(--series-1)", "g")}
+                      {bar(
+                        p.netCents,
+                        left + barW + 3,
+                        p.netCents < 0
+                          ? "var(--status-critical)"
+                          : "var(--series-2)",
+                        "n",
+                      )}
+                    </g>
+                    <text
+                      className="axis-text"
+                      x={cx}
+                      y={PLOT_H + 17}
+                      textAnchor="middle"
+                    >
+                      {p.label}
+                      {p.partial ? "*" : ""}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          </g>
+        </svg>
+      </div>
+
+      {hover ? (
+        <div
+          className="viz-tooltip"
+          style={{ left: hover.x, top: hover.y }}
+          role="status"
+        >
+          <div className="font-semibold mb-1">{hover.p.full}</div>
+          <div className="flex items-center gap-3">
+            <span className="tip-label">Gross</span>
+            <span className="tip-value">{money(hover.p.grossCents)}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="tip-label">Net</span>
+            <span className="tip-value">{money(hover.p.netCents)}</span>
+          </div>
+          <div className="tip-dim mt-1">
+            {money(hover.p.grossCents - hover.p.netCents)} operating expense
+          </div>
+          {hover.p.partial ? (
+            <div className="tip-dim mt-1">Still in progress</div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Table view of the same pair. */
+export function ProfitPairTable({ points }: { points: ProfitPoint[] }) {
+  return (
+    <div className="mt-3 max-h-[420px] overflow-y-auto">
+      <table className="dataview">
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th className="num">Gross</th>
+            <th className="num">Net</th>
+            <th className="num">Operating expense</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...points].reverse().map((p) => (
+            <tr key={p.key}>
+              <td>
+                {p.full}
+                {p.partial ? (
+                  <span style={{ color: "var(--text-muted)" }}>
+                    {" "}
+                    · in progress
+                  </span>
+                ) : null}
+              </td>
+              <td className="num">{money(p.grossCents)}</td>
+              <td className="num">{money(p.netCents)}</td>
+              <td className="num">{money(p.grossCents - p.netCents)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }

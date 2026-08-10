@@ -220,6 +220,8 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
               netProfit={m.netProfitWindow}
               expenses={m.expensesWindow}
               grossMargin={m.grossMargin}
+              profitPair={m.profitPair}
+              showProfitPair={primary === "profit" && !tile}
               sharedExcludedCents={m.sharedExcludedCents}
             />
           ) : (

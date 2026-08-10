@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Bar, TileSeries } from "@/lib/metrics";
+import type { Bar, ProfitPoint, TileSeries } from "@/lib/metrics";
 import type { Metric } from "@/lib/types";
-import { SeriesChart, SeriesTable } from "./SeriesChart";
+import {
+  ProfitPairChart,
+  ProfitPairTable,
+  SeriesChart,
+  SeriesTable,
+} from "./SeriesChart";
 import type { Grain } from "@/lib/range";
 import { axisTicks, compactMoney, money, percent } from "@/lib/format";
 import { NotTracked } from "./StatTile";
@@ -40,6 +45,14 @@ interface Props {
   netProfit?: Metric<number>;
   expenses?: Metric<number>;
   grossMargin?: Metric<number>;
+  /** Gross and net per period, plotted together in the profit view. */
+  profitPair?: Metric<ProfitPoint[]>;
+  /**
+   * True when the profit view owns the chart — i.e. Profit is the subject AND
+   * no stat tile is overriding it. The card can't work this out for itself:
+   * a tile's series arrives through the same `series` prop.
+   */
+  showProfitPair?: boolean;
   /** Shared overhead excluded by a platform filter, for the caveat line. */
   sharedExcludedCents?: number;
 }
@@ -67,6 +80,8 @@ export function RevenueCard({
   netProfit,
   expenses,
   grossMargin,
+  profitPair,
+  showProfitPair = false,
   sharedExcludedCents = 0,
 }: Props) {
   const [view, setView] = useState<View>("chart");
@@ -264,7 +279,19 @@ export function RevenueCard({
         </div>
 
         <div className="flex items-center gap-4">
-          <Legend />
+          <Legend
+            pairs={
+              showProfitPair
+                ? [
+                    ["var(--series-1)", "Gross"],
+                    ["var(--series-2)", "Net"],
+                  ]
+                : [
+                    ["var(--series-1)", "SaaS"],
+                    ["var(--series-2)", "Usage"],
+                  ]
+            }
+          />
           <ViewToggle view={view} onChange={setView} />
         </div>
       </div>
@@ -275,7 +302,11 @@ export function RevenueCard({
       >
         <div className="flex items-baseline justify-between gap-3 mb-1">
           <h2 className="text-[13px] font-bold">
-            {series ? series.title : `Collected revenue by ${unit}`}
+            {showProfitPair
+              ? `Gross and net profit by ${unit}`
+              : series
+                ? series.title
+                : `Collected revenue by ${unit}`}
           </h2>
           {!unavailableReason ? (
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -285,7 +316,13 @@ export function RevenueCard({
           ) : null}
         </div>
 
-        {series ? (
+        {showProfitPair && profitPair?.available ? (
+          view === "chart" ? (
+            <ProfitPairChart points={profitPair.value} />
+          ) : (
+            <ProfitPairTable points={profitPair.value} />
+          )
+        ) : series ? (
           series.points.available ? (
             view === "chart" ? (
               <SeriesChart series={series} points={series.points.value} />
@@ -581,18 +618,18 @@ function Share({ part, whole }: { part: number; whole: number }) {
   );
 }
 
-function Legend() {
+/** Named by whatever the two series currently are, not hard-coded to revenue's. */
+function Legend({ pairs }: { pairs: [string, string][] }) {
   return (
     <div
       className="flex items-center gap-3 text-xs"
       style={{ color: "var(--text-secondary)" }}
     >
-      <span className="flex items-center gap-1.5">
-        <Swatch color="var(--series-1)" /> SaaS
-      </span>
-      <span className="flex items-center gap-1.5">
-        <Swatch color="var(--series-2)" /> Usage
-      </span>
+      {pairs.map(([color, label]) => (
+        <span key={label} className="flex items-center gap-1.5">
+          <Swatch color={color} /> {label}
+        </span>
+      ))}
     </div>
   );
 }
