@@ -43,14 +43,42 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
   const params = useSearchParams();
 
   const platform = params.get("platform") ?? undefined;
+
+  /**
+   * The time view as component state, seeded from the URL once — the same
+   * treatment the platform filter got, for the same reason. Navigating on
+   * every button press re-ran the client render, and a slow transition showed
+   * the Suspense fallback, collapsed the page height and clamped the scroll to
+   * the top. The URL is still rewritten so a view stays shareable.
+   */
+  const [viewState, setViewState] = useState<{
+    range?: string;
+    from?: string;
+    to?: string;
+    grain?: string;
+  }>(() => ({
+    range: params.get("range") ?? undefined,
+    from: params.get("from") ?? undefined,
+    to: params.get("to") ?? undefined,
+    grain: params.get("grain") ?? undefined,
+  }));
+
   const { range, bucket } = resolveView(
-    readRange(
-      params.get("range") ?? undefined,
-      params.get("from") ?? undefined,
-      params.get("to") ?? undefined,
-    ),
-    params.get("grain") ?? undefined,
+    readRange(viewState.range, viewState.from, viewState.to),
+    viewState.grain,
   );
+
+  /** Apply a new view built by the picker: state first, then the address bar. */
+  const applyView = (p: URLSearchParams) => {
+    setViewState({
+      range: p.get("range") ?? undefined,
+      from: p.get("from") ?? undefined,
+      to: p.get("to") ?? undefined,
+      grain: p.get("grain") ?? undefined,
+    });
+    const qs = p.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  };
 
   /**
    * Platform filter as component state, NOT a route change.
@@ -279,6 +307,7 @@ export function Dashboard({ snapshot }: { snapshot: Snapshot }) {
             to={range.to}
             bucket={bucket}
             rangeDays={range.days}
+            onChange={applyView}
           />
 
           <div className="seg" role="tablist" aria-label="Chart subject">

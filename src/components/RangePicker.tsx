@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import {
   BUCKETS,
@@ -25,6 +24,7 @@ export function RangePicker({
   to,
   bucket,
   rangeDays,
+  onChange,
 }: {
   range: RangeId;
   platform: string[];
@@ -33,9 +33,16 @@ export function RangePicker({
   bucket: Grain;
   /** Span of the current window, for greying buckets it can't support. */
   rangeDays: number;
+  /**
+   * Receives the fully-built params for the next view. The page applies them
+   * as STATE and rewrites the URL — never a navigation. router.push re-runs
+   * the client render, and when the transition is slow enough to show the
+   * Suspense fallback the page height collapses and the browser clamps the
+   * scroll to the top: the "click a range button, get thrown to the top"
+   * bug, same root cause as the platform chips had.
+   */
+  onChange: (params: URLSearchParams) => void;
 }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const popRef = useRef<HTMLDivElement>(null);
   const isPhone = useMediaQuery("(max-width: 640px)");
@@ -112,10 +119,7 @@ export function RangePicker({
     };
   }, [open, isPhone]);
 
-  const push = (params: URLSearchParams) => {
-    const qs = params.toString();
-    startTransition(() => router.push(qs ? `/?${qs}` : "/", { scroll: false }));
-  };
+  const push = onChange;
 
   // Changing the window drops any explicit bucket, so the pair goes back to
   // its natural pairing rather than stranding e.g. "Annually" on a 1-week view.
@@ -222,7 +226,6 @@ export function RangePicker({
     <div
       ref={scrollRef}
       className="control-scroll flex items-center gap-2"
-      style={{ opacity: pending ? 0.6 : 1, transition: "opacity 120ms" }}
     >
       <div className="seg" role="group" aria-label="Time range">
         {RANGES.map((r) => (
