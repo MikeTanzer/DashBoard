@@ -8,6 +8,10 @@ comes from a pluggable connector, and any metric without a source renders as
 **"Not yet tracked"** with the exact next step to light it up. Nothing is ever
 silently zero.
 
+> **Taking this over / connecting real data?** Start with
+> [HANDOFF.md](HANDOFF.md) — the API contract, the static→server flip, and the
+> gotchas for whoever writes the feed.
+
 ---
 
 ## Run it locally
@@ -221,7 +225,8 @@ Any Node host works; Vercel is the shortest path.
    carry it.
 
 Snapshots are cached in-process for `PYROTREE_CACHE_SECONDS` (default 300).
-Force a refresh with `GET /api/snapshot?force=1` (needs `PYROTREE_SNAPSHOT_API`).
+(The `/api/snapshot` route from earlier revisions no longer exists — it was
+removed with the static-export conversion.)
 
 ---
 
